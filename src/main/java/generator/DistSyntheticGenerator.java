@@ -60,15 +60,13 @@ public class DistSyntheticGenerator {
     // FORMULA 1:   r=cos(30)*R=[sqrt(3)/2]*R=[sqrt(3)/2]*t
     // FORMULA 2:   d=2*r=2*[sqrt(3)/2]*t=sqrt(3)*t
     // FORMULA 3:   t=d/sqrt(3)
-    
     // Landownership = small hexagon, data members
     // Number of hexagons(land ownerships) per axis :)
     long smallHexagonsPerAxis;
     public Broadcast<Double> SMALL_HEX_SIDE;
-    
+
     // State = large hexagon, data members
     public Broadcast<Double> LARGE_HEX_SIDE;
-
 
     // all supported types
     enum Shape {
@@ -119,6 +117,9 @@ public class DistSyntheticGenerator {
     JavaRDD<LandOwnership> landOwnershipRDD;
     JavaRDD<State> stateRDD;
 
+    static SparkConf conf;
+    static JavaSparkContext sc;
+    
     // ----- CONSTRUCTORS -----
     /**
      * @param hdfsOutputPath
@@ -214,7 +215,7 @@ public class DistSyntheticGenerator {
             if (i % 2 == 1) {
                 rowx = x;
             } else {
-                rowx = x + (this.getLargeHexagonDx()/ 2d);
+                rowx = x + (this.getLargeHexagonDx() / 2d);
             }
             for (int j = 1; j <= (this.getLargeHexagonsPerAxis()); j++) {
                 stateList.add(new State(rowx, rowy, this));
@@ -732,7 +733,7 @@ public class DistSyntheticGenerator {
                 y2 = y1;
                 x3 = x1 + (nodesPerAxis - 1) * this.getSmallHexagonDx();
                 y3 = y1 + (nodesPerAxis - 1) * this.getSmallHexagonDy();
-                
+
                 x4 = x1;
                 y4 = y1 + (nodesPerAxis - 1) * this.getSmallHexagonDy();
 
@@ -902,11 +903,12 @@ public class DistSyntheticGenerator {
         int N = new Integer(args[1]);
         int partitions = new Integer(args[2]);
 
-        SparkConf conf = new SparkConf()
+        // create Spark conf and context
+        conf = new SparkConf()
                 .setAppName("Distributed Synthetic Generator - " + N);
         conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer");
         conf.set("spark.kryo.registrator", AvgRegistrator.class.getName());
-        JavaSparkContext sc = new JavaSparkContext(conf);
+        sc = new JavaSparkContext(conf);
 
         // start time measurement for the main part of the program
         long startTime = System.nanoTime();
@@ -914,63 +916,61 @@ public class DistSyntheticGenerator {
         g.TAG_VALUE = sc.broadcast(g.MAX_TAG_VALUE);
         g.SMALL_HEX_SIDE = sc.broadcast(g.getSmallHexagonSide());
         g.LARGE_HEX_SIDE = sc.broadcast(g.getLargeHexagonSide());
-
-        long smallHexStart = System.nanoTime();
+        long landOwnershipPartitions = 0;
+        long statePartitions = 0;
+        long landOwnershipStart = System.nanoTime();
         try {
             System.out.println("-------------------------------------");
-            System.out.println("Generating " + Math.pow(g.getSmallHexagonsPerAxis(),2) + " land ownerships (small hexagons)...");
+            System.out.println("Generating " + Math.pow(g.getSmallHexagonsPerAxis(), 2) + " land ownerships (small hexagons)...");
             if (partitions != 0) {
-                g.landOwnershipRDD = sc.parallelize(g.generateLandOwnerships(), partitions).cache();
+                g.landOwnershipRDD = sc.parallelize(g.generateLandOwnerships(), partitions);
             } else {
-                g.landOwnershipRDD = sc.parallelize(g.generateLandOwnerships()).cache();
+                g.landOwnershipRDD = sc.parallelize(g.generateLandOwnerships());
             }
-            System.out.println("num of partitions of g.landOwnershipRDD = " + g.landOwnershipRDD.getNumPartitions());
+            landOwnershipPartitions = g.landOwnershipRDD.getNumPartitions();
             System.out.print("\n");
             System.out.println("-------------------------------------");
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
         }
-        JavaRDD<String> smallHexTriplesRDD = g.landOwnershipRDD.flatMap(lndown -> lndown.getTriples()).cache();
-        System.out.println("num of partitions of smallHexTriplesRDD = " + smallHexTriplesRDD.getNumPartitions());
-        smallHexTriplesRDD.saveAsTextFile(hdfsOutputPath + Shape.HEXAGON_SMALL.name());
-        long smallHexEnd = System.nanoTime();
-        long smallHexDuration = smallHexEnd - smallHexStart;
-        long smallHexSecs = (long) (smallHexDuration / Math.pow(10, 9));
-        long smallHexMins = (smallHexSecs / 60);
-        smallHexSecs = smallHexSecs - (smallHexMins * 60);
-        smallHexTriplesRDD.coalesce(1).saveAsTextFile("hdfs://localhost:9000/user/tioannid/tmp1/" + Shape.HEXAGON_SMALL.name());
-        smallHexTriplesRDD.unpersist();
-        
-        long largeHexStart = System.nanoTime();
+        JavaRDD<String> landOwnershipTriplesRDD = g.landOwnershipRDD.flatMap(lndown -> lndown.getTriples());
+        System.out.println("num of partitions of smallHexTriplesRDD = " + landOwnershipTriplesRDD.getNumPartitions());
+        landOwnershipTriplesRDD.saveAsTextFile(hdfsOutputPath + Shape.HEXAGON_SMALL.name());
+        long landOwnershipEnd = System.nanoTime();
+        long landOwnershipDuration = landOwnershipEnd - landOwnershipStart;
+        long landOwnershipSecs = (long) (landOwnershipDuration / Math.pow(10, 9));
+        long landOwnershipMins = (landOwnershipSecs / 60);
+        landOwnershipSecs = landOwnershipSecs - (landOwnershipMins * 60);
+
+        long stateStart = System.nanoTime();
         try {
-            System.out.println("Generating " + Math.pow(g.getLargeHexagonsPerAxis(),2) + " states (large hexagons)...");
+            System.out.println("Generating " + Math.pow(g.getLargeHexagonsPerAxis(), 2) + " states (large hexagons)...");
             if (partitions != 0) {
-                g.stateRDD = sc.parallelize(g.generateStates(), partitions).cache();
+                g.stateRDD = sc.parallelize(g.generateStates(), partitions);
             } else {
-                g.stateRDD = sc.parallelize(g.generateStates()).cache();
+                g.stateRDD = sc.parallelize(g.generateStates());
             }
-            System.out.println("num of partitions of g.stateRDD = " + g.stateRDD.getNumPartitions());
+            statePartitions = g.stateRDD.getNumPartitions();
             System.out.print("\n");
             System.out.println("-------------------------------------");
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
         }
-        JavaRDD<String> largeHexTriplesRDD = g.stateRDD.flatMap(state -> state.getTriples()).cache();
-        System.out.println("num of partitions of largeHexTriplesRDD = " + largeHexTriplesRDD.getNumPartitions());
-        largeHexTriplesRDD.saveAsTextFile(hdfsOutputPath + Shape.HEXAGON_LARGE.name());
-        long largeHexEnd = System.nanoTime();
-        long largeHexDuration = largeHexEnd - largeHexStart;
-        long largeHexSecs = (long) (largeHexDuration / Math.pow(10, 9));
-        long largeHexMins = (largeHexSecs / 60);
-        largeHexSecs = largeHexSecs - (largeHexMins * 60);
-        largeHexTriplesRDD.coalesce(1).saveAsTextFile("hdfs://localhost:9000/user/tioannid/tmp1/" + Shape.HEXAGON_LARGE.name());
-        largeHexTriplesRDD.unpersist();
+        JavaRDD<String> stateTriplesRDD = g.stateRDD.flatMap(state -> state.getTriples());
+        System.out.println("num of partitions of largeHexTriplesRDD = " + stateTriplesRDD.getNumPartitions());
+        stateTriplesRDD.saveAsTextFile(hdfsOutputPath + Shape.HEXAGON_LARGE.name());
+        long stateEnd = System.nanoTime();
+        long stateDuration = stateEnd - stateStart;
+        long stateSecs = (long) (stateDuration / Math.pow(10, 9));
+        long stateMins = (stateSecs / 60);
+        stateSecs = stateSecs - (stateMins * 60);
 
-        // smallHexTriplesRDD.coalesce(1).saveAsTextFile("hdfs://localhost:9000/user/tioannid/tmp1/" + Shape.HEXAGON_SMALL.name());
         System.out.println("Maximum tag generated: " + g.MAX_TAG_VALUE);
-        System.out.println("Execution time : " + smallHexMins + "min " + smallHexSecs + "sec");
-        System.out.println("Execution time : " + largeHexMins + "min " + largeHexSecs + "sec");
+        System.out.println("Execution time : " + landOwnershipMins + "min " + landOwnershipSecs + "sec");
+        System.out.println("num of partitions of g.landOwnershipRDD = " + landOwnershipPartitions);
+        System.out.println("Execution time : " + stateMins + "min " + stateSecs + "sec");
+        System.out.println("num of partitions of g.stateRDD = " + statePartitions);
     }
 }
