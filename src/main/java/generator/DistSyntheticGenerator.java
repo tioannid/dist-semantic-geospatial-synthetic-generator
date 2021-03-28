@@ -11,7 +11,10 @@ package generator;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.serializers.FieldSerializer;
 import generator.features.LandOwnership;
+import generator.features.PointOfInterest;
+import generator.features.Road;
 import generator.features.State;
+import generator.features.StateCenter;
 import geomshape.gHexagon;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -63,10 +66,15 @@ public class DistSyntheticGenerator {
     // Landownership = small hexagon, data members
     // Number of hexagons(land ownerships) per axis :)
     long smallHexagonsPerAxis;
+
+    public Broadcast<Long> SMALL_HEX_PER_AXIS;
+
     public Broadcast<Double> SMALL_HEX_SIDE;
 
     // State = large hexagon, data members
     public Broadcast<Double> LARGE_HEX_SIDE;
+
+    public Broadcast<Double> MAXX, MAXY;
 
     // all supported types
     enum Shape {
@@ -116,10 +124,13 @@ public class DistSyntheticGenerator {
 
     JavaRDD<LandOwnership> landOwnershipRDD;
     JavaRDD<State> stateRDD;
+    JavaRDD<StateCenter> stateCenterRDD;
+    JavaRDD<PointOfInterest> poiRDD;
+    JavaRDD<Road> roadRDD;
 
     static SparkConf conf;
     static JavaSparkContext sc;
-    
+
     // ----- CONSTRUCTORS -----
     /**
      * @param hdfsOutputPath
@@ -224,6 +235,98 @@ public class DistSyntheticGenerator {
             rowy = rowy + dy;
         }
         return stateList;
+    }
+
+    /**
+     * Generates the large hexagon centers corresponding to state centers
+     *
+     * @throws IOException
+     */
+    public List<StateCenter> generateStateCenters() throws IOException {
+        List<StateCenter> stateCenterList = new ArrayList<>();
+        double x, y;
+        x = this.getLargeHexagonDx() / 2d;
+        y = this.getLargeHexagonSide();
+        double dy = (3d * y / 2d);
+        double rowx, rowy = y;
+        for (int i = 1; i <= (this.getLargeHexagonsPerAxis()); i++) {
+            //generate a line
+            if (i % 2 == 1) {
+                rowx = x;
+            } else {
+                rowx = x + (this.getLargeHexagonDx() / 2d);
+            }
+            for (int j = 1; j <= (this.getLargeHexagonsPerAxis()); j++) {
+                stateCenterList.add(new StateCenter(rowx, rowy, this));
+                rowx += this.getLargeHexagonDx();
+            }
+            rowy = rowy + dy;
+        }
+        return stateCenterList;
+    }
+
+    /**
+     * Generates the points corresponding to points of interest
+     *
+     * @throws IOException
+     */
+    public List<PointOfInterest> generatePOIs() throws IOException {
+        List<PointOfInterest> poiList = new ArrayList<>();
+        double maxDx = (maxX - minX) / ((double) this.smallHexagonsPerAxis);
+        double x1, x2, y1, y2, slope, dx, x3, y3;
+        y2 = this.getSmallHexagonDy() * ((double) this.smallHexagonsPerAxis); //maxy
+        for (int i = 0; i < this.smallHexagonsPerAxis; i++) {
+            x1 = minX + (double) i * maxDx;
+            y1 = minY;
+            x2 = x1 + maxDx;
+            // y2 is constant to the maximum y
+            slope = (y2 - y1) / maxDx;
+            dx = maxDx / (double) this.smallHexagonsPerAxis;
+            for (int j = 1; j <= this.smallHexagonsPerAxis; j++) {
+                double tmp = (double) j * dx;
+                x3 = x1 + tmp;
+                y3 = slope * tmp + y1;
+                poiList.add(new PointOfInterest(x3, y3, this));
+            }
+        }
+        return poiList;
+    }
+
+    /**
+     * Generates the linestrings corresponding to roads
+     *
+     * @throws IOException
+     */
+    public List<Road> generateRoads() throws IOException {
+        List<Road> roadList = new ArrayList<>();
+
+        // generate(Shape.LINESTRING, this.numberOfPolygonsPerAxis / 2, this.hexagonSide, this.deltaX / 2d);
+        double x, y, epsilon;
+        long n = this.smallHexagonsPerAxis / 2;
+        double a = this.getSmallHexagonSide();
+        double dx = this.getSmallHexagonDx() / 2d;
+        // Vertical lines
+        epsilon = dx / 6;
+        //x = 19 * this.getSmallHexagonDx() / 12; // 3d * dx + epsilon;
+        x = 3d * dx + epsilon;
+        y = this.getSmallHexagonSide() - epsilon / 2; // a - epsilon / 2d;
+        for (int i = 1; i <= n; i++) {
+            // generateInstance(shp, x, y, a, epsilon, (i % 2 == 0), true);
+            // String wkt = generateLineString(x, y, a, epsilon, (i % 2 == 0), true);
+            roadList.add(new Road(x, y, epsilon, (i % 2 == 0), true, this));
+            //x = x + (2 - 6 / this.smallHexagonsPerAxis) * this.getSmallHexagonDx();
+            x += ((2d - 3d / (double) (this.smallHexagonsPerAxis/2)) * this.getSmallHexagonDx());
+        }
+        // Horizontal lines
+        x = this.getSmallHexagonSide() - epsilon / 2; // a - epsilon / 2d;
+        y = 3d * dx + epsilon;
+        for (int i = 1; i <= n; i++) {
+            // generateInstance(shp, x, y, a, epsilon, (i % 2 == 0), true);
+            // String wkt = generateLineString(x, y, a, epsilon, (i % 2 == 0), true);
+            roadList.add(new Road(x, y, epsilon, (i % 2 == 0), false, this));
+            y += (3d - 3d / (double) n) * a;
+        }
+        return roadList;
     }
 
     /**
@@ -913,11 +1016,19 @@ public class DistSyntheticGenerator {
         // start time measurement for the main part of the program
         long startTime = System.nanoTime();
         DistSyntheticGenerator g = new DistSyntheticGenerator(hdfsOutputPath, N);
+        g.SMALL_HEX_PER_AXIS = sc.broadcast(g.smallHexagonsPerAxis);
+        g.MAXX = sc.broadcast(g.maxX);
+        g.MAXY = sc.broadcast(g.maxY);
         g.TAG_VALUE = sc.broadcast(g.MAX_TAG_VALUE);
         g.SMALL_HEX_SIDE = sc.broadcast(g.getSmallHexagonSide());
         g.LARGE_HEX_SIDE = sc.broadcast(g.getLargeHexagonSide());
         long landOwnershipPartitions = 0;
         long statePartitions = 0;
+        long stateCenterPartitions = 0;
+        long poiPartitions = 0;
+        long roadPartitions = 0;
+
+        // Land Ownership generation
         long landOwnershipStart = System.nanoTime();
         try {
             System.out.println("-------------------------------------");
@@ -943,6 +1054,7 @@ public class DistSyntheticGenerator {
         long landOwnershipMins = (landOwnershipSecs / 60);
         landOwnershipSecs = landOwnershipSecs - (landOwnershipMins * 60);
 
+        // State generation
         long stateStart = System.nanoTime();
         try {
             System.out.println("Generating " + Math.pow(g.getLargeHexagonsPerAxis(), 2) + " states (large hexagons)...");
@@ -967,10 +1079,87 @@ public class DistSyntheticGenerator {
         long stateMins = (stateSecs / 60);
         stateSecs = stateSecs - (stateMins * 60);
 
+        // State Center generation
+        long stateCenterStart = System.nanoTime();
+        try {
+            System.out.println("-------------------------------------");
+            System.out.println("Generating " + Math.pow(g.getLargeHexagonsPerAxis(), 2) + " state center (points)...");
+            g.stateCenterRDD = (partitions != 0)
+                    ? sc.parallelize(g.generateStateCenters(), partitions)
+                    : sc.parallelize(g.generateStateCenters());
+            stateCenterPartitions = g.stateCenterRDD.getNumPartitions();
+            System.out.print("\n");
+            System.out.println("-------------------------------------");
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+        }
+        JavaRDD<String> stateCenterTriplesRDD = g.stateCenterRDD.flatMap(stateCenter -> stateCenter.getTriples());
+        System.out.println("num of partitions of stateCenterTriplesRDD = " + stateCenterTriplesRDD.getNumPartitions());
+        stateCenterTriplesRDD.saveAsTextFile(hdfsOutputPath + Shape.HEXAGON_LARGE_CENTER.name());
+        long stateCenterEnd = System.nanoTime();
+        long stateCenterDuration = stateCenterEnd - stateCenterStart;
+        long stateCenterSecs = (long) (stateCenterDuration / Math.pow(10, 9));
+        long stateCenterMins = (stateCenterSecs / 60);
+        stateCenterSecs = stateCenterSecs - (stateCenterMins * 60);
+
+        // Points of Interest generation
+        long poiStart = System.nanoTime();
+        try {
+            System.out.println("-------------------------------------");
+            System.out.println("Generating " + Math.pow(g.getSmallHexagonsPerAxis(), 2) + " points of interest (points)...");
+            g.poiRDD = (partitions != 0)
+                    ? sc.parallelize(g.generatePOIs(), partitions)
+                    : sc.parallelize(g.generatePOIs());
+            poiPartitions = g.poiRDD.getNumPartitions();
+            System.out.print("\n");
+            System.out.println("-------------------------------------");
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+        }
+        JavaRDD<String> poiTriplesRDD = g.poiRDD.flatMap(poi -> poi.getTriples());
+        System.out.println("num of partitions of poiTriplesRDD = " + poiTriplesRDD.getNumPartitions());
+        poiTriplesRDD.saveAsTextFile(hdfsOutputPath + Shape.POINT.name());
+        long poiEnd = System.nanoTime();
+        long poiDuration = poiEnd - poiStart;
+        long poiSecs = (long) (poiDuration / Math.pow(10, 9));
+        long poiMins = (poiSecs / 60);
+        poiSecs = poiSecs - (poiMins * 60);
+
+        // Roads generation
+        long roadStart = System.nanoTime();
+        try {
+            System.out.println("-------------------------------------");
+            System.out.println("Generating " + g.getSmallHexagonsPerAxis() + " roads (linestrings)...");
+            g.roadRDD = (partitions != 0)
+                    ? sc.parallelize(g.generateRoads(), partitions)
+                    : sc.parallelize(g.generateRoads());
+            roadPartitions = g.roadRDD.getNumPartitions();
+            System.out.print("\n");
+            System.out.println("-------------------------------------");
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+        }
+        JavaRDD<String> roadTriplesRDD = g.roadRDD.flatMap(road -> road.getTriples());
+        System.out.println("num of partitions of roadTriplesRDD = " + roadTriplesRDD.getNumPartitions());
+        roadTriplesRDD.saveAsTextFile(hdfsOutputPath + Shape.LINESTRING.name());
+        long roadEnd = System.nanoTime();
+        long roadDuration = roadEnd - roadStart;
+        long roadSecs = (long) (roadDuration / Math.pow(10, 9));
+        long roadMins = (roadSecs / 60);
+        roadSecs = roadSecs - (roadMins * 60);
         System.out.println("Maximum tag generated: " + g.MAX_TAG_VALUE);
         System.out.println("Execution time : " + landOwnershipMins + "min " + landOwnershipSecs + "sec");
         System.out.println("num of partitions of g.landOwnershipRDD = " + landOwnershipPartitions);
         System.out.println("Execution time : " + stateMins + "min " + stateSecs + "sec");
         System.out.println("num of partitions of g.stateRDD = " + statePartitions);
+        System.out.println("Execution time : " + stateCenterMins + "min " + stateCenterSecs + "sec");
+        System.out.println("num of partitions of g.stateRDD = " + stateCenterPartitions);
+        System.out.println("Execution time : " + poiMins + "min " + poiSecs + "sec");
+        System.out.println("num of partitions of g.stateRDD = " + poiPartitions);
+        System.out.println("Execution time : " + roadMins + "min " + roadSecs + "sec");
+        System.out.println("num of partitions of g.roadRDD = " + roadPartitions);
     }
 }

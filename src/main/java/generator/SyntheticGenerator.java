@@ -1085,30 +1085,27 @@ public class SyntheticGenerator {
             System.out.println("-------------------------------------");
             System.out.println("Generating " + (numberOfPolygons / 3) * (numberOfPolygons / 3) + " large hexagons...");
             g.generateLargeHexagons();
-            if (false) {
-                System.out.println("-------------------------------------");
-                System.out.println("Generating " + (numberOfPolygons / 3) * (numberOfPolygons / 3) + " large hexagon centers...");
-                g.generateLargeHexagonCenters();
-                System.out.println("-------------------------------------");
-                System.out.println("Generating " + numberOfPolygons + " linestrings...");
-                g.generateLineStrings();
-                System.out.println("-------------------------------------");
-                System.out.println("Generating " + numberOfPolygons * numberOfPolygons + " points...");
-                g.generatePoints();
-                System.out.println("-------------------------------------");
+            System.out.println("-------------------------------------");
+            System.out.println("Generating " + (numberOfPolygons / 3) * (numberOfPolygons / 3) + " large hexagon centers...");
+            g.generateLargeHexagonCenters();
+            System.out.println("-------------------------------------");
+            System.out.println("Generating " + numberOfPolygons * numberOfPolygons + " points...");
+            g.generatePoints();
+            System.out.println("-------------------------------------");
+            System.out.println("-------------------------------------");
+            System.out.println("Generating " + numberOfPolygons + " linestrings...");
+            g.generateLineStrings();
+            System.out.println("-------------------------------------");
+            System.out.println("You may run the StrabonLoader filler script as follows: ");
+            System.out.print("filler ");
+            Iterator<Entry<Shape, String>> it = g.namedGraphs.entrySet().iterator();
+            while (it.hasNext()) {
+                Entry<Shape, String> pair = it.next();
+                Shape shp = pair.getKey();
+                String namedGraph = pair.getValue();
 
-                System.out.println("-------------------------------------");
-                System.out.println("You may run the filler as follows: ");
-                System.out.print("filler ");
-                Iterator<Entry<Shape, String>> it = g.namedGraphs.entrySet().iterator();
-                while (it.hasNext()) {
-                    Entry<Shape, String> pair = it.next();
-                    Shape shp = pair.getKey();
-                    String namedGraph = pair.getValue();
-
-                    System.out.print(g.output.getAbsolutePath() + File.separator + shp.toString() + ".nt");
-                    System.out.print(" '" + namedGraph + "' ");
-                }
+                System.out.print(g.output.getAbsolutePath() + File.separator + shp.toString() + ".nt");
+                System.out.print(" '" + namedGraph + "' ");
             }
             System.out.print("\n");
             System.out.println("-------------------------------------");
