@@ -27,26 +27,26 @@ The 'DistDataSyntheticGenerator' main class has the following syntax:
 	<N> : dataset scale factor, a value (preferably 2^k) which scales the size of the dataset
 	<P> : number of partitions, to be used for the generation of the 5 data files (0=automatic)
 	
-The following command uses the 'hdfs' jar to create a N=1024 scaled dataset with 5 files each one in 1 partition
+The following command uses the 'hdfs' jar to create a N=1024 scaled dataset comprising 5 parquet snappy-compressed files each one in 1 partition
 
-	$ $SPARK_HOME/bin/spark-submit --class generator.DistSyntheticGenerator --master spark://localhost:7077 target/SyntheticGenerator-1.0-SNAPSHOT_hdfs.jar hdfs://localhost:9000/user/tioannid/tmp/data/ 1024 1
+	$ $SPARK_HOME/bin/spark-submit --class generator.DistDataSyntheticGenerator --master spark://localhost:7077 --conf spark.sql.parquet.compression.codec=snappy target/SyntheticGenerator-1.0-SNAPSHOT_hdfs.jar hdfs://localhost:9000/user/tioannid/tmp/data/ 1024 1
 
 	$ hdfs dfs -ls tmp/data/*
-	Found 2 items
-	-rw-r--r--   1 tioannid supergroup          0 2021-03-31 14:48 tmp/data/HEXAGON_LARGE/_SUCCESS
-	-rw-r--r--   1 tioannid supergroup  157818453 2021-03-31 14:48 tmp/data/HEXAGON_LARGE/part-00000
-	Found 2 items
-	-rw-r--r--   1 tioannid supergroup          0 2021-03-31 14:48 tmp/data/HEXAGON_LARGE_CENTER/_SUCCESS
-	-rw-r--r--   1 tioannid supergroup  143199414 2021-03-31 14:48 tmp/data/HEXAGON_LARGE_CENTER/part-00000
-	Found 2 items
-	-rw-r--r--   1 tioannid supergroup          0 2021-03-31 14:48 tmp/data/HEXAGON_SMALL/_SUCCESS
-	-rw-r--r--   1 tioannid supergroup 1574413982 2021-03-31 14:48 tmp/data/HEXAGON_SMALL/part-00000
-	Found 2 items
-	-rw-r--r--   1 tioannid supergroup          0 2021-03-31 14:49 tmp/data/LINESTRING/_SUCCESS
-	-rw-r--r--   1 tioannid supergroup   25577349 2021-03-31 14:49 tmp/data/LINESTRING/part-00000
-	Found 2 items
-	-rw-r--r--   1 tioannid supergroup          0 2021-03-31 14:49 tmp/data/POINT/_SUCCESS
-	-rw-r--r--   1 tioannid supergroup 1371138151 2021-03-31 14:49 tmp/data/POINT/part-00000
+        Found 2 items
+        -rw-r--r--   1 tioannid supergroup          0 2021-03-31 20:43 tmp/data/HEXAGON_LARGE/_SUCCESS
+        -rw-r--r--   1 tioannid supergroup   18518706 2021-03-31 20:43 tmp/data/HEXAGON_LARGE/part-00000-8cea87ca-f8f4-4e9b-a6cd-84706602da4b-c000.snappy.parquet
+        Found 2 items
+        -rw-r--r--   1 tioannid supergroup          0 2021-03-31 20:43 tmp/data/HEXAGON_LARGE_CENTER/_SUCCESS
+        -rw-r--r--   1 tioannid supergroup   13715316 2021-03-31 20:43 tmp/data/HEXAGON_LARGE_CENTER/part-00000-e9bff63a-57b4-4f4f-82f3-0de8d4ce54d7-c000.snappy.parquet
+        Found 2 items
+        -rw-r--r--   1 tioannid supergroup          0 2021-03-31 20:43 tmp/data/HEXAGON_SMALL/_SUCCESS
+        -rw-r--r--   1 tioannid supergroup  183303269 2021-03-31 20:43 tmp/data/HEXAGON_SMALL/part-00000-04aabe3d-94c6-44d9-b6e1-fdb672664f58-c000.snappy.parquet
+        Found 2 items
+        -rw-r--r--   1 tioannid supergroup          0 2021-03-31 20:43 tmp/data/LINESTRING/_SUCCESS
+        -rw-r--r--   1 tioannid supergroup   13040764 2021-03-31 20:43 tmp/data/LINESTRING/part-00000-31b35b9f-44d5-4a96-8e09-07e8d218dd81-c000.snappy.parquet
+        Found 2 items
+        -rw-r--r--   1 tioannid supergroup          0 2021-03-31 20:43 tmp/data/POINT/_SUCCESS
+        -rw-r--r--   1 tioannid supergroup  144275434 2021-03-31 20:43 tmp/data/POINT/part-00000-e8a2decb-3add-400e-8d85-d3e34f417d8b-c000.snappy.parquet
 
 Change the N=1024 to a preferebly 2^k value of your choice. For production clusters and jobs with sufficient resources allocated, the number of partitions P should be set either to 0 or to a relatively high value eg. 8 or 16.
 

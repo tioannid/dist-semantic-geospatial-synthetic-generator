@@ -33,6 +33,7 @@ import org.locationtech.jts.io.WKTReader;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.SparkConf;
 import org.apache.spark.serializer.KryoRegistrator;
+import utils.Utils;
 
 /**
  * @author Theofilos Ioannidis <tioannid@di.uoa.gr>
@@ -109,7 +110,7 @@ public class DistQuerySyntheticGenerator {
     Integer MAX_TAG_VALUE = 8192;
 
     //private double[] selectivities = new double[]{0.4, 0.3, 0.2, 0.1,  0.001};
-    double[] selectivities = new double[]{1, 0.75, 0.5, 0.25, 0.1, 0.001};
+    double[] selectivities;
     static SparkConf conf;
     static JavaSparkContext sc;
 
@@ -361,16 +362,7 @@ public class DistQuerySyntheticGenerator {
 
             System.out.println("Start = " + start.toText() + " End = " + end.toText());
             System.out.println("Distance = " + distanceInMeters + "m ");
-        } catch (ParseException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        } catch (NoSuchAuthorityCodeException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        } catch (TransformException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        } catch (FactoryException e) {
+        }catch (ParseException | TransformException | FactoryException e) {
             // TODO Auto-generated catch block
             e.printStackTrace();
         }
@@ -833,7 +825,7 @@ public class DistQuerySyntheticGenerator {
 
         // create Spark conf and context
         conf = new SparkConf()
-                .setAppName("Distributed Synthetic Generator - " + N);
+                .setAppName("Distributed Synthetic Generator - " + Utils.prettyPrint(args));
         conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer");
         conf.set("spark.kryo.registrator", AvgRegistrator.class.getName());
         sc = new JavaSparkContext(conf);
