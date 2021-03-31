@@ -8,3 +8,12 @@ Ontology comprises:
 - states (large hexagons)
 - roads (linestrings)
 - points of interest (points)
+
+Compiling, packing
+--------------------
+
+There are two profiles (hdfs, hops) which target a different variant of a spark hadoop cluster
+
+$ mvn clean package -DskipTests [-Phdfs]
+
+$ mvn clean package -DskipTests -Phops
