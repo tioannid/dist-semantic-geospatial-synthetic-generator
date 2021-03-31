@@ -11,15 +11,14 @@ package generator;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.serializers.FieldSerializer;
 import generator.features.LandOwnership;
-import generator.features.PointOfInterest;
-import generator.features.Road;
-import generator.features.State;
-import generator.features.StateCenter;
 import geomshape.gHexagon;
 import java.io.IOException;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
 import org.geotools.geometry.jts.JTS;
@@ -32,15 +31,15 @@ import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.io.ParseException;
 import org.locationtech.jts.io.WKTReader;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.SparkConf;
-import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.serializer.KryoRegistrator;
 
 /**
  * @author Theofilos Ioannidis <tioannid@di.uoa.gr>
  */
-public class DistSyntheticGenerator {
+public class DistQuerySyntheticGenerator {
+
+    private static final org.apache.log4j.Logger logger = org.apache.log4j.Logger.getLogger("DistQuerySyntheticGenerator");
 
     String unit = "<http://www.opengis.net/def/uom/OGC/1.0/metre>";
 //	final String unit = "<http://www.opengis.net/def/uom/OGC/1.0/degree>";
@@ -67,20 +66,11 @@ public class DistSyntheticGenerator {
     // Number of hexagons(land ownerships) per axis :)
     long smallHexagonsPerAxis;
 
-    public Broadcast<Long> SMALL_HEX_PER_AXIS;
-
-    public Broadcast<Double> SMALL_HEX_SIDE;
-
-    // State = large hexagon, data members
-    public Broadcast<Double> LARGE_HEX_SIDE;
-
-    public Broadcast<Double> MAXX, MAXY;
-
     // all supported types
     enum Shape {
         HEXAGON_SMALL, HEXAGON_LARGE, LINESTRING, POINT, HEXAGON_LARGE_CENTER
     };
-    HashMap<Shape, String> namedGraphs = new HashMap<DistSyntheticGenerator.Shape, String>() {
+    HashMap<Shape, String> namedGraphs = new HashMap<DistQuerySyntheticGenerator.Shape, String>() {
         {
             put(Shape.HEXAGON_SMALL, "http://geographica.di.uoa.gr/generator/landOwnership");
             put(Shape.HEXAGON_LARGE, "http://geographica.di.uoa.gr/generator/state");
@@ -117,17 +107,9 @@ public class DistSyntheticGenerator {
 
     // maximum tag value
     Integer MAX_TAG_VALUE = 8192;
-    public Broadcast<Integer> TAG_VALUE;
 
     //private double[] selectivities = new double[]{0.4, 0.3, 0.2, 0.1,  0.001};
     double[] selectivities = new double[]{1, 0.75, 0.5, 0.25, 0.1, 0.001};
-
-    JavaRDD<LandOwnership> landOwnershipRDD;
-    JavaRDD<State> stateRDD;
-    JavaRDD<StateCenter> stateCenterRDD;
-    JavaRDD<PointOfInterest> poiRDD;
-    JavaRDD<Road> roadRDD;
-
     static SparkConf conf;
     static JavaSparkContext sc;
 
@@ -138,9 +120,15 @@ public class DistSyntheticGenerator {
      * generated along an axis. smallHexagonsPerAxis^2 hexagons will be
      * generated.
      */
-    public DistSyntheticGenerator(String hdfsOutputPath, long smallHexagonsPerAxis) {
+    public DistQuerySyntheticGenerator(String hdfsOutputPath, long smallHexagonsPerAxis,
+            List<String> spatialSelectiviesList) {
         this.smallHexagonsPerAxis = smallHexagonsPerAxis;
         output = new Path(hdfsOutputPath);
+        // convert spatial selectivitity string list to array of doubles
+        this.selectivities = new double[spatialSelectiviesList.size()];
+        for (int i = 0; i < this.selectivities.length; i++) {
+            this.selectivities[i] = Double.parseDouble(spatialSelectiviesList.get(i));
+        }
         while (smallHexagonsPerAxis < MAX_TAG_VALUE) {
             MAX_TAG_VALUE >>= 1; // divide by 2
             //MAX_TAG_VALUE = MAX_TAG_VALUE / 2;
@@ -181,277 +169,111 @@ public class DistSyntheticGenerator {
         return (3 * getSmallHexagonDx());
     }
 
-    /**
-     * Generates the small hexagons corresponding to land ownerships
-     *
-     * @throws IOException
-     */
-    public List<LandOwnership> generateLandOwnerships() throws IOException {
-        List<LandOwnership> landOwnershipList = new ArrayList<>();
-        double x, y;
-        x = this.getSmallHexagonDx() / 2d;
-        y = this.getSmallHexagonSide();
-        double dy = (3d * y / 2d);
-        double rowx, rowy = y;
-        for (int i = 1; i <= this.getSmallHexagonsPerAxis(); i++) {
-            //generate a line
-            if (i % 2 == 1) {
-                rowx = x;
-            } else {
-                rowx = x + (this.getSmallHexagonDx() / 2d);
-            }
-            for (int j = 1; j <= this.getSmallHexagonsPerAxis(); j++) {
-                landOwnershipList.add(new LandOwnership(rowx, rowy, this));
-                rowx += this.getSmallHexagonDx();
-            }
-            rowy = rowy + dy;
-        }
-        return landOwnershipList;
-    }
-
-    /**
-     * Generates the large hexagons corresponding to states
-     *
-     * @throws IOException
-     */
-    public List<State> generateStates() throws IOException {
-        List<State> stateList = new ArrayList<>();
-        double x, y;
-        x = this.getLargeHexagonDx() / 2d;
-        y = this.getLargeHexagonSide();
-        double dy = (3d * y / 2d);
-        double rowx, rowy = y;
-        for (int i = 1; i <= (this.getLargeHexagonsPerAxis()); i++) {
-            //generate a line
-            if (i % 2 == 1) {
-                rowx = x;
-            } else {
-                rowx = x + (this.getLargeHexagonDx() / 2d);
-            }
-            for (int j = 1; j <= (this.getLargeHexagonsPerAxis()); j++) {
-                stateList.add(new State(rowx, rowy, this));
-                rowx += this.getLargeHexagonDx();
-            }
-            rowy = rowy + dy;
-        }
-        return stateList;
-    }
-
-    /**
-     * Generates the large hexagon centers corresponding to state centers
-     *
-     * @throws IOException
-     */
-    public List<StateCenter> generateStateCenters() throws IOException {
-        List<StateCenter> stateCenterList = new ArrayList<>();
-        double x, y;
-        x = this.getLargeHexagonDx() / 2d;
-        y = this.getLargeHexagonSide();
-        double dy = (3d * y / 2d);
-        double rowx, rowy = y;
-        for (int i = 1; i <= (this.getLargeHexagonsPerAxis()); i++) {
-            //generate a line
-            if (i % 2 == 1) {
-                rowx = x;
-            } else {
-                rowx = x + (this.getLargeHexagonDx() / 2d);
-            }
-            for (int j = 1; j <= (this.getLargeHexagonsPerAxis()); j++) {
-                stateCenterList.add(new StateCenter(rowx, rowy, this));
-                rowx += this.getLargeHexagonDx();
-            }
-            rowy = rowy + dy;
-        }
-        return stateCenterList;
-    }
-
-    /**
-     * Generates the points corresponding to points of interest
-     *
-     * @throws IOException
-     */
-    public List<PointOfInterest> generatePOIs() throws IOException {
-        List<PointOfInterest> poiList = new ArrayList<>();
-        double maxDx = (maxX - minX) / ((double) this.smallHexagonsPerAxis);
-        double x1, x2, y1, y2, slope, dx, x3, y3;
-        y2 = this.getSmallHexagonDy() * ((double) this.smallHexagonsPerAxis); //maxy
-        for (int i = 0; i < this.smallHexagonsPerAxis; i++) {
-            x1 = minX + (double) i * maxDx;
-            y1 = minY;
-            x2 = x1 + maxDx;
-            // y2 is constant to the maximum y
-            slope = (y2 - y1) / maxDx;
-            dx = maxDx / (double) this.smallHexagonsPerAxis;
-            for (int j = 1; j <= this.smallHexagonsPerAxis; j++) {
-                double tmp = (double) j * dx;
-                x3 = x1 + tmp;
-                y3 = slope * tmp + y1;
-                poiList.add(new PointOfInterest(x3, y3, this));
-            }
-        }
-        return poiList;
-    }
-
-    /**
-     * Generates the linestrings corresponding to roads
-     *
-     * @throws IOException
-     */
-    public List<Road> generateRoads() throws IOException {
-        List<Road> roadList = new ArrayList<>();
-
-        // generate(Shape.LINESTRING, this.numberOfPolygonsPerAxis / 2, this.hexagonSide, this.deltaX / 2d);
-        double x, y, epsilon;
-        long n = this.smallHexagonsPerAxis / 2;
-        double a = this.getSmallHexagonSide();
-        double dx = this.getSmallHexagonDx() / 2d;
-        // Vertical lines
-        epsilon = dx / 6;
-        //x = 19 * this.getSmallHexagonDx() / 12; // 3d * dx + epsilon;
-        x = 3d * dx + epsilon;
-        y = this.getSmallHexagonSide() - epsilon / 2; // a - epsilon / 2d;
-        for (int i = 1; i <= n; i++) {
-            // generateInstance(shp, x, y, a, epsilon, (i % 2 == 0), true);
-            // String wkt = generateLineString(x, y, a, epsilon, (i % 2 == 0), true);
-            roadList.add(new Road(x, y, epsilon, (i % 2 == 0), true, this));
-            //x = x + (2 - 6 / this.smallHexagonsPerAxis) * this.getSmallHexagonDx();
-            x += ((2d - 3d / (double) (this.smallHexagonsPerAxis/2)) * this.getSmallHexagonDx());
-        }
-        // Horizontal lines
-        x = this.getSmallHexagonSide() - epsilon / 2; // a - epsilon / 2d;
-        y = 3d * dx + epsilon;
-        for (int i = 1; i <= n; i++) {
-            // generateInstance(shp, x, y, a, epsilon, (i % 2 == 0), true);
-            // String wkt = generateLineString(x, y, a, epsilon, (i % 2 == 0), true);
-            roadList.add(new Road(x, y, epsilon, (i % 2 == 0), false, this));
-            y += (3d - 3d / (double) n) * a;
-        }
-        return roadList;
-    }
-
-    /**
-     * @param x: x-coordinate of the hexagon's center
-     * @param y: y-coordinate of the hexagon's center
-     * @param t: the length of the hexagon's side
-     */
-    private String generateHexagon(double x, double y, double t) {
-
-        double dx = Math.sqrt(3d) * t / 2d;
-
-        StringBuffer sb = new StringBuffer(1024);
-        sb.append("POLYGON ((");
-
-        // P1
-        sb.append(x);
-        sb.append(" ");
-        sb.append(y - t);
-        sb.append(", ");
-        // P2
-        sb.append(x + dx);
-        sb.append(" ");
-        sb.append(y - t / 2d);
-        sb.append(", ");
-        // P3
-        sb.append(x + dx);
-        sb.append(" ");
-        sb.append(y + t / 2d);
-        sb.append(", ");
-        // P4
-        sb.append(x);
-        sb.append(" ");
-        sb.append(y + t);
-        sb.append(", ");
-        // P5
-        sb.append(x - dx);
-        sb.append(" ");
-        sb.append(y + t / 2d);
-        sb.append(", ");
-        // P6
-        sb.append(x - dx);
-        sb.append(" ");
-        sb.append(y - t / 2d);
-        sb.append(", ");
-        // P1
-        sb.append(x);
-        sb.append(" ");
-        sb.append(y - t);
-        sb.append("))");
-
-        return sb.toString();
-    }
-
-    /**
-     * @param x: x-coordinate of the lowest point of the line string
-     * @param y: y-coordinate of the lowest point of the line string
-     * @param a: the length of the hexagon's side
-     * @param epsilon: a small value that will be added/substracted to the
-     * x-coordinate of the linestring's points
-     * @param forward: should the second point have a larger x-coordinate than
-     * the first?
-     * @return
-     */
-    private String generateLineString(double x, double y, double a, double epsilon, boolean forward, boolean vertical) {
-        StringBuffer sb = new StringBuffer(1024);
-        sb.append("LINESTRING (");
-
-        double maxy = this.getSmallHexagonDy() * ((double) this.smallHexagonsPerAxis);
-        double maxx = this.getSmallHexagonDx() * ((double) this.smallHexagonsPerAxis);
-
-        int points = 0;
-        while ((vertical && y < maxy) || ((!vertical) && x < maxx)) {
-            if (vertical) {
-                if (forward) {
-                    x += epsilon;
-                    forward = false;
-                } else {
-                    x -= epsilon / 2d;
-                    forward = true;
-                }
-
-            } else {
-                if (forward) {
-                    y += epsilon;
-                    forward = false;
-                } else {
-                    y -= epsilon / 2d;
-                    forward = true;
-                }
-            }
-
-            if (x > maxX || y > maxY) {
+    String getQueryName(int function, int queryType, int k) {
+        // function name
+        String functionName = "";
+        switch (function) {
+            case 0:
+                functionName = "Intersects";
                 break;
+            case 1:
+                functionName = "Touches";
+                break;
+            case 2:
+                functionName = "Within";
+                break;
+        }
+        // query type
+        String type = "";
+        switch (queryType) {
+            case 0:
+                type = "Selection";
+                break;
+            case 1:
+                type = "Join";
+                break;
+        }
+        // feature 1, 2
+        String feature1 = "", feature2 = "";
+        if (function == 0) {
+            feature1 = "Landownerships";
+            if (queryType == 0) {
+                feature2 = "";
+            } else if (queryType == 1) {
+                feature2 = "States";
             }
-
-            points++;
-            sb.append(x);
-            sb.append(" ");
-            sb.append(y);
-            sb.append(", ");
-
-            if (vertical) {
-                y += a * 2d;
+        } else if (function == 1) {
+            if (queryType == 1) {
+                feature1 = "States";
+                feature2 = "States";
+            }
+        } else if (function == 2) {
+            feature1 = "Pois";
+            if (queryType == 0) {
+                feature2 = "";
+            } else if (queryType == 1) {
+                feature2 = "States";
+            }
+        }
+        String feature1Str
+                = (feature1.equalsIgnoreCase(""))
+                ? feature1
+                : (feature1 + "_");
+        String feature2Str
+                = (feature2.equalsIgnoreCase(""))
+                ? feature2
+                : (feature2 + "_");
+        String baseName = "Synthetic_"
+                + type + "_"
+                + functionName + "_";
+        String queryName = "";
+        // k
+        String selectivityName = "";
+        String tagName = "";
+        if (queryType == 1) { // joins have 4 query combinations
+            switch (k) {
+                case 0:
+                    queryName = baseName
+                            + feature1Str
+                            + feature2Str
+                            + "1_1";
+                    break;
+                case 1:
+                    queryName = baseName
+                            + feature1Str
+                            + feature2Str
+                            + "1_"
+                            + this.MAX_TAG_VALUE.toString();
+                    break;
+                case 2: // switch feature 1 and feature 2 position in the query!!!
+                    queryName = baseName
+                            + feature2Str
+                            + feature1Str
+                            + "1_"
+                            + this.MAX_TAG_VALUE.toString();
+                    break;
+                case 3:
+                    queryName = baseName
+                            + feature1Str
+                            + feature2Str
+                            + this.MAX_TAG_VALUE.toString() + "_"
+                            + this.MAX_TAG_VALUE.toString();
+                    break;
+            }
+        } else if (queryType == 0) { // selections have 2*selectivities queries
+            int pos = (int) k / 2;
+            selectivityName = String.valueOf(this.selectivities[pos]);
+            if (k % 2 == 0) {
+                tagName = "1";
             } else {
-                x += (this.getSmallHexagonDx() * 2d);
+                tagName = this.MAX_TAG_VALUE.toString();
             }
-
+            queryName = baseName
+                    + feature1Str
+                    + tagName + "_"
+                    + selectivityName;
         }
-
-        int pos = sb.lastIndexOf(",");
-        sb.replace(pos, pos + 2, ")");
-
-        if (points < 2) {
-            return "";
-        }
-
-        return sb.toString();
-    }
-
-    /**
-     * @param x: x-coordinate of the hexagon's center
-     * @param y: y-coordinate of the hexagon's center
-     */
-    private String generatePoint(double x, double y) {
-        return "POINT ( " + x + " " + y + ")";
+        return queryName;
     }
 
     public String[][][] generateQueries() {
@@ -996,15 +818,18 @@ public class DistSyntheticGenerator {
     public static void main(String[] args) {
         // check number of arguments
         if (args.length < 3) {
-            System.err.println("Usage: SyntheticGenerator <OUTPUTPATH> <N> <PARTITIONS>");
-            System.err.println("       where <OUTPUT PATH> is the folder where the generated RDF files will be stored,");
-            System.err.println("             <N> is number of generated land ownership (small hexagons) along the x axis");
-            System.err.println("             <PARTITIONS> is number of partitions to use");
+            logger.error("Usage: SyntheticGenerator <OUTPUTPATH> <N> <SPATIAL_SELECTIVITIES>");
+            logger.error("       where <OUTPUT PATH> is the folder where the generated query files will be stored,");
+            logger.error("             <N> is number of generated land ownership (small hexagons) along the x axis");
+            logger.error("             <SPATIAL_SELECTIVITIES> is the spatial selectivity list (comma separated within double-quotes)");
         }
         // read arguments
         String hdfsOutputPath = args[0];
         int N = new Integer(args[1]);
-        int partitions = new Integer(args[2]);
+        String spatialSelectiviesArg = args[2];
+
+        // read spatial selectivities list
+        List<String> spatialSelectiviesList = Arrays.asList(spatialSelectiviesArg.split(","));
 
         // create Spark conf and context
         conf = new SparkConf()
@@ -1013,153 +838,54 @@ public class DistSyntheticGenerator {
         conf.set("spark.kryo.registrator", AvgRegistrator.class.getName());
         sc = new JavaSparkContext(conf);
 
-        // start time measurement for the main part of the program
-        long startTime = System.nanoTime();
-        DistSyntheticGenerator g = new DistSyntheticGenerator(hdfsOutputPath, N);
-        g.SMALL_HEX_PER_AXIS = sc.broadcast(g.smallHexagonsPerAxis);
-        g.MAXX = sc.broadcast(g.maxX);
-        g.MAXY = sc.broadcast(g.maxY);
-        g.TAG_VALUE = sc.broadcast(g.MAX_TAG_VALUE);
-        g.SMALL_HEX_SIDE = sc.broadcast(g.getSmallHexagonSide());
-        g.LARGE_HEX_SIDE = sc.broadcast(g.getLargeHexagonSide());
-        long landOwnershipPartitions = 0;
-        long statePartitions = 0;
-        long stateCenterPartitions = 0;
-        long poiPartitions = 0;
-        long roadPartitions = 0;
+        DistQuerySyntheticGenerator g = new DistQuerySyntheticGenerator(hdfsOutputPath, N, spatialSelectiviesList);
 
-        // Land Ownership generation
-        long landOwnershipStart = System.nanoTime();
+        // create the HDFS output path if not present
+        Configuration hdfsConf = new Configuration();
+        FileSystem fs = null;
+        FSDataOutputStream out = null;
+        Path outPath = new Path(hdfsOutputPath);
         try {
-            System.out.println("-------------------------------------");
-            System.out.println("Generating " + Math.pow(g.getSmallHexagonsPerAxis(), 2) + " land ownerships (small hexagons)...");
-            if (partitions != 0) {
-                g.landOwnershipRDD = sc.parallelize(g.generateLandOwnerships(), partitions);
+            fs = FileSystem.get(hdfsConf);
+            if (fs.isDirectory(outPath)) {
+                out = fs.create(new Path(hdfsOutputPath), false);
             } else {
-                g.landOwnershipRDD = sc.parallelize(g.generateLandOwnerships());
+                throw new IOException("Target folder is not a folder but a file!");
             }
-            landOwnershipPartitions = g.landOwnershipRDD.getNumPartitions();
-            System.out.print("\n");
-            System.out.println("-------------------------------------");
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
+        } catch (IOException ex) {
+            logger.error(ex.getMessage());
         }
-        JavaRDD<String> landOwnershipTriplesRDD = g.landOwnershipRDD.flatMap(lndown -> lndown.getTriples());
-        System.out.println("num of partitions of smallHexTriplesRDD = " + landOwnershipTriplesRDD.getNumPartitions());
-        landOwnershipTriplesRDD.saveAsTextFile(hdfsOutputPath + Shape.HEXAGON_SMALL.name());
-        long landOwnershipEnd = System.nanoTime();
-        long landOwnershipDuration = landOwnershipEnd - landOwnershipStart;
-        long landOwnershipSecs = (long) (landOwnershipDuration / Math.pow(10, 9));
-        long landOwnershipMins = (landOwnershipSecs / 60);
-        landOwnershipSecs = landOwnershipSecs - (landOwnershipMins * 60);
 
-        // State generation
-        long stateStart = System.nanoTime();
-        try {
-            System.out.println("Generating " + Math.pow(g.getLargeHexagonsPerAxis(), 2) + " states (large hexagons)...");
-            if (partitions != 0) {
-                g.stateRDD = sc.parallelize(g.generateStates(), partitions);
-            } else {
-                g.stateRDD = sc.parallelize(g.generateStates());
+        logger.info("\n\nGeneral Queries\n");
+        String[][][] q = g.generateQueries();
+        int queryCnt = 0;
+        Path queryFilePath = null;
+        FSDataOutputStream queryFile = null;
+        String queryName = "";
+        for (int function = 0; function < q.length; function++) { // intersect, touch, within
+            String[][] queriesForFunction = q[function];
+            for (int queryType = 0; queryType < queriesForFunction.length; queryType++) { // selection, join
+                if ((function == 1) && (queryType == 0)) {
+                    continue;
+                }
+                String[] queries = queriesForFunction[queryType];
+                for (int k = 0; k < queries.length; k++) {
+                    try {
+                        logger.info(queries[k]);
+                        queryFilePath = new Path(hdfsOutputPath + String.format("Q%02d_%s", queryCnt++, g.getQueryName(function, queryType, k) + ".qry"));
+                        try {
+                            queryFile = fs.create(queryFilePath);
+                        } catch (IOException ex) {
+                            logger.error(ex.getMessage());
+                        }
+                        byte[] bytes = queries[k].getBytes();
+                        queryFile.write(bytes, 0, bytes.length);
+                        queryFile.close();
+                    } catch (IOException ex) {
+                        logger.error(ex.getMessage());
+                    }
+                }
             }
-            statePartitions = g.stateRDD.getNumPartitions();
-            System.out.print("\n");
-            System.out.println("-------------------------------------");
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
         }
-        JavaRDD<String> stateTriplesRDD = g.stateRDD.flatMap(state -> state.getTriples());
-        System.out.println("num of partitions of largeHexTriplesRDD = " + stateTriplesRDD.getNumPartitions());
-        stateTriplesRDD.saveAsTextFile(hdfsOutputPath + Shape.HEXAGON_LARGE.name());
-        long stateEnd = System.nanoTime();
-        long stateDuration = stateEnd - stateStart;
-        long stateSecs = (long) (stateDuration / Math.pow(10, 9));
-        long stateMins = (stateSecs / 60);
-        stateSecs = stateSecs - (stateMins * 60);
-
-        // State Center generation
-        long stateCenterStart = System.nanoTime();
-        try {
-            System.out.println("-------------------------------------");
-            System.out.println("Generating " + Math.pow(g.getLargeHexagonsPerAxis(), 2) + " state center (points)...");
-            g.stateCenterRDD = (partitions != 0)
-                    ? sc.parallelize(g.generateStateCenters(), partitions)
-                    : sc.parallelize(g.generateStateCenters());
-            stateCenterPartitions = g.stateCenterRDD.getNumPartitions();
-            System.out.print("\n");
-            System.out.println("-------------------------------------");
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-        }
-        JavaRDD<String> stateCenterTriplesRDD = g.stateCenterRDD.flatMap(stateCenter -> stateCenter.getTriples());
-        System.out.println("num of partitions of stateCenterTriplesRDD = " + stateCenterTriplesRDD.getNumPartitions());
-        stateCenterTriplesRDD.saveAsTextFile(hdfsOutputPath + Shape.HEXAGON_LARGE_CENTER.name());
-        long stateCenterEnd = System.nanoTime();
-        long stateCenterDuration = stateCenterEnd - stateCenterStart;
-        long stateCenterSecs = (long) (stateCenterDuration / Math.pow(10, 9));
-        long stateCenterMins = (stateCenterSecs / 60);
-        stateCenterSecs = stateCenterSecs - (stateCenterMins * 60);
-
-        // Points of Interest generation
-        long poiStart = System.nanoTime();
-        try {
-            System.out.println("-------------------------------------");
-            System.out.println("Generating " + Math.pow(g.getSmallHexagonsPerAxis(), 2) + " points of interest (points)...");
-            g.poiRDD = (partitions != 0)
-                    ? sc.parallelize(g.generatePOIs(), partitions)
-                    : sc.parallelize(g.generatePOIs());
-            poiPartitions = g.poiRDD.getNumPartitions();
-            System.out.print("\n");
-            System.out.println("-------------------------------------");
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-        }
-        JavaRDD<String> poiTriplesRDD = g.poiRDD.flatMap(poi -> poi.getTriples());
-        System.out.println("num of partitions of poiTriplesRDD = " + poiTriplesRDD.getNumPartitions());
-        poiTriplesRDD.saveAsTextFile(hdfsOutputPath + Shape.POINT.name());
-        long poiEnd = System.nanoTime();
-        long poiDuration = poiEnd - poiStart;
-        long poiSecs = (long) (poiDuration / Math.pow(10, 9));
-        long poiMins = (poiSecs / 60);
-        poiSecs = poiSecs - (poiMins * 60);
-
-        // Roads generation
-        long roadStart = System.nanoTime();
-        try {
-            System.out.println("-------------------------------------");
-            System.out.println("Generating " + g.getSmallHexagonsPerAxis() + " roads (linestrings)...");
-            g.roadRDD = (partitions != 0)
-                    ? sc.parallelize(g.generateRoads(), partitions)
-                    : sc.parallelize(g.generateRoads());
-            roadPartitions = g.roadRDD.getNumPartitions();
-            System.out.print("\n");
-            System.out.println("-------------------------------------");
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-        }
-        JavaRDD<String> roadTriplesRDD = g.roadRDD.flatMap(road -> road.getTriples());
-        System.out.println("num of partitions of roadTriplesRDD = " + roadTriplesRDD.getNumPartitions());
-        roadTriplesRDD.saveAsTextFile(hdfsOutputPath + Shape.LINESTRING.name());
-        long roadEnd = System.nanoTime();
-        long roadDuration = roadEnd - roadStart;
-        long roadSecs = (long) (roadDuration / Math.pow(10, 9));
-        long roadMins = (roadSecs / 60);
-        roadSecs = roadSecs - (roadMins * 60);
-        System.out.println("Maximum tag generated: " + g.MAX_TAG_VALUE);
-        System.out.println("Execution time : " + landOwnershipMins + "min " + landOwnershipSecs + "sec");
-        System.out.println("num of partitions of g.landOwnershipRDD = " + landOwnershipPartitions);
-        System.out.println("Execution time : " + stateMins + "min " + stateSecs + "sec");
-        System.out.println("num of partitions of g.stateRDD = " + statePartitions);
-        System.out.println("Execution time : " + stateCenterMins + "min " + stateCenterSecs + "sec");
-        System.out.println("num of partitions of g.stateRDD = " + stateCenterPartitions);
-        System.out.println("Execution time : " + poiMins + "min " + poiSecs + "sec");
-        System.out.println("num of partitions of g.stateRDD = " + poiPartitions);
-        System.out.println("Execution time : " + roadMins + "min " + roadSecs + "sec");
-        System.out.println("num of partitions of g.roadRDD = " + roadPartitions);
     }
 }

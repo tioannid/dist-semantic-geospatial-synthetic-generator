@@ -5,7 +5,7 @@
  */
 package generator.features;
 
-import generator.DistSyntheticGenerator;
+import generator.DistDataSyntheticGenerator;
 import geomshape.gLinestring;
 import geomshape.gPoint;
 import java.io.Serializable;
@@ -33,11 +33,11 @@ public class Road implements Serializable {    // Small Hexagon
     long id;
     double x, y, e;
     boolean forward, vertical;
-    DistSyntheticGenerator g;
+    DistDataSyntheticGenerator g;
 
     // ----- CONSTRUCTORS -----
     public Road(double x, double y, double e,
-            boolean forward, boolean vertical, DistSyntheticGenerator g) {
+            boolean forward, boolean vertical, DistDataSyntheticGenerator g) {
         this.id = getClassInstanceId(); // get id and increment it
         this.x = x;
         this.y = y;

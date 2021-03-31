@@ -5,7 +5,7 @@
  */
 package generator.features;
 
-import generator.DistSyntheticGenerator;
+import generator.DistDataSyntheticGenerator;
 import geomshape.gHexagon;
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -32,10 +32,10 @@ public class State implements Serializable {    // Small Hexagon
     //gHexagon hex;
     long id;
     double x, y;
-    DistSyntheticGenerator g;
+    DistDataSyntheticGenerator g;
 
     // ----- CONSTRUCTORS -----
-    public State(double x, double y, DistSyntheticGenerator g) {
+    public State(double x, double y, DistDataSyntheticGenerator g) {
         this.id = getClassInstanceId(); // get id and increment it
         this.x = x;
         this.y = y;

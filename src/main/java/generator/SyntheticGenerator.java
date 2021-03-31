@@ -1119,30 +1119,29 @@ public class SyntheticGenerator {
             }
         }
 
-        if (false) {
-
-            System.out.println("\n\nGeneral Queries\n");
-            String[][][] q = g.generateQueries();
-            for (int i = 0; i < q.length; i++) {
-                String[][] queriesForFunction = q[i];
-                for (int j = 0; j < queriesForFunction.length; j++) {
-                    String[] queries = queriesForFunction[j];
-                    for (int k = 0; k < queries.length; k++) {
-                        System.out.println(queries[k]);
-                        //System.out.println("\"" +
-                        //	queries[k].replace("\n", " ")
-                        //		.replace("  ", " ")
-                        //		.replace("  ", " ")
-                        //		.replace("  ", " ")
-                        //		.replace("  ", " ")
-                        //		.replace("  ", " ")
-                        //		.replace("  ", " ")
-                        //		.replace("\"", "\\\\\\\"")
-                        //		+"\" \\");
-                    }
+        System.out.println("\n\nGeneral Queries\n");
+        String[][][] q = g.generateQueries();
+        for (int i = 0; i < q.length; i++) {
+            String[][] queriesForFunction = q[i];
+            for (int j = 0; j < queriesForFunction.length; j++) {
+                String[] queries = queriesForFunction[j];
+                for (int k = 0; k < queries.length; k++) {
+                    System.out.println(queries[k]);
+                    //System.out.println("\"" +
+                    //	queries[k].replace("\n", " ")
+                    //		.replace("  ", " ")
+                    //		.replace("  ", " ")
+                    //		.replace("  ", " ")
+                    //		.replace("  ", " ")
+                    //		.replace("  ", " ")
+                    //		.replace("  ", " ")
+                    //		.replace("\"", "\\\\\\\"")
+                    //		+"\" \\");
                 }
             }
+        }
 
+        if (false) {
             System.out.println("\n\nPoint Queries\n");
             String[][][] qp = g.generatePointQueries();
             for (int i = 0; i < qp.length; i++) {
@@ -1163,9 +1162,10 @@ public class SyntheticGenerator {
                         //		+"\" \\");
                     }
                 }
-            }
 
-            /*
+            }
+        }
+        /*
 		for (double d: g.selectivities) {
 			System.out.println(g.definePolygonForSelectivity(Shape.HEXAGON_SMALL, d));
 		}
@@ -1173,8 +1173,8 @@ public class SyntheticGenerator {
 		for (double d: g.selectivities) {
 			System.out.println(g.definePolygonForSelectivity(Shape.POINT, d));
 		}
-             */
-            System.out.println("Maximum tag generated: " + g.MAX_TAG_VALUE);
-        }
+         */
+        System.out.println("Maximum tag generated: " + g.MAX_TAG_VALUE);
+
     }
 }
