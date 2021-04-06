@@ -32,14 +32,16 @@ public class LandOwnership implements Serializable {    // Small Hexagon
     //gHexagon hex;
     long id;
     double x, y;
-    DistDataSyntheticGenerator g;
+    double hexSide;
+    int MAX_TAG_VALUE;
 
     // ----- CONSTRUCTORS -----
     public LandOwnership(double x, double y, DistDataSyntheticGenerator g) {
         this.id = getClassInstanceId(); // get id and increment it
         this.x = x;
         this.y = y;
-        this.g = g;
+        this.hexSide = g.SMALL_HEX_SIDE.getValue();
+        this.MAX_TAG_VALUE = g.TAG_VALUE.getValue();
     }
 
     // ----- DATA ACCESSORS -----
@@ -51,9 +53,7 @@ public class LandOwnership implements Serializable {    // Small Hexagon
         String prefixGeometryId = prefix + "geometry/" + id;
         String prefixIdTag = prefix + id + "/tag/";
         String prefixIdTagId;
-        double hexSide = g.SMALL_HEX_SIDE.getValue();
         String wkt = new gHexagon(x, y, hexSide).getWKT();
-        int MAX_TAG_VALUE = g.TAG_VALUE.getValue();
 
         // feature is class
         triples.add("<" + prefixID + "/> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <" + prefix + className + "> .");

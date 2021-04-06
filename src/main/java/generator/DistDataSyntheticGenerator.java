@@ -129,6 +129,10 @@ public class DistDataSyntheticGenerator {
     static JavaSparkContext sc;
     static SparkSession spark;
 
+    static long InitialFreeMemory = 0;
+    static long TotalMemory = 0;
+    static long MaxHeapMemoryUsed = 0;
+
     // ----- CONSTRUCTORS -----
     /**
      * @param hdfsOutputPath
@@ -349,6 +353,11 @@ public class DistDataSyntheticGenerator {
      *
      */
     public static void main(String[] args) {
+        TotalMemory = Runtime.getRuntime().totalMemory();
+        InitialFreeMemory = Runtime.getRuntime().freeMemory();
+        logger.info("DBG-10 : JVM total memory = " + TotalMemory);
+        logger.info("DBG-10 : JVM initial free memory = " + InitialFreeMemory);
+
         // check number of arguments
         if (args.length < 3) {
             System.err.println("Usage: SyntheticGenerator <OUTPUTPATH> <N> <PARTITIONS>");
@@ -368,7 +377,6 @@ public class DistDataSyntheticGenerator {
                 .getOrCreate();
         sc = JavaSparkContext.fromSparkContext(spark.sparkContext());
         conf = sc.getConf();
-        
 
         // start time measurement for the main part of the program
         long startTime = System.nanoTime();
@@ -407,20 +415,22 @@ public class DistDataSyntheticGenerator {
         Dataset<String> landOwnershipTriplesDF = spark.createDataset(landOwnershipTriplesRDD.rdd(), Encoders.STRING());
         landOwnershipTriplesDF.write().parquet(hdfsOutputPath + Shape.HEXAGON_SMALL.name());
         long landOwnershipEnd = System.nanoTime();
+        g.landOwnershipRDD.unpersist();
+        g.landOwnershipRDD = null;
         long landOwnershipDuration = landOwnershipEnd - landOwnershipStart;
         long landOwnershipSecs = (long) (landOwnershipDuration / Math.pow(10, 9));
         long landOwnershipMins = (landOwnershipSecs / 60);
         landOwnershipSecs = landOwnershipSecs - (landOwnershipMins * 60);
 
+        runGC();
+
         // State generation
         long stateStart = System.nanoTime();
         try {
             logger.info("Generating " + Math.pow(g.getLargeHexagonsPerAxis(), 2) + " states (large hexagons)...");
-            if (partitions != 0) {
-                g.stateRDD = sc.parallelize(g.generateStates(), partitions);
-            } else {
-                g.stateRDD = sc.parallelize(g.generateStates());
-            }
+            g.stateRDD = (partitions != 0)
+                    ? sc.parallelize(g.generateStates(), partitions)
+                    : sc.parallelize(g.generateStates());
             statePartitions = g.stateRDD.getNumPartitions();
             System.out.print("\n");
             logger.info("-------------------------------------");
@@ -433,10 +443,14 @@ public class DistDataSyntheticGenerator {
         Dataset<String> stateTriplesDF = spark.createDataset(stateTriplesRDD.rdd(), Encoders.STRING());
         stateTriplesDF.write().parquet(hdfsOutputPath + Shape.HEXAGON_LARGE.name());
         long stateEnd = System.nanoTime();
+        g.stateRDD.unpersist();
+        g.stateRDD = null;
         long stateDuration = stateEnd - stateStart;
         long stateSecs = (long) (stateDuration / Math.pow(10, 9));
         long stateMins = (stateSecs / 60);
         stateSecs = stateSecs - (stateMins * 60);
+
+        runGC();
 
         // State Center generation
         long stateCenterStart = System.nanoTime();
@@ -458,10 +472,14 @@ public class DistDataSyntheticGenerator {
         Dataset<String> stateCenterTriplesDF = spark.createDataset(stateCenterTriplesRDD.rdd(), Encoders.STRING());
         stateCenterTriplesDF.write().parquet(hdfsOutputPath + Shape.HEXAGON_LARGE_CENTER.name());
         long stateCenterEnd = System.nanoTime();
+        g.stateCenterRDD.unpersist();
+        g.stateCenterRDD = null;
         long stateCenterDuration = stateCenterEnd - stateCenterStart;
         long stateCenterSecs = (long) (stateCenterDuration / Math.pow(10, 9));
         long stateCenterMins = (stateCenterSecs / 60);
         stateCenterSecs = stateCenterSecs - (stateCenterMins * 60);
+
+        runGC();
 
         // Points of Interest generation
         long poiStart = System.nanoTime();
@@ -483,10 +501,14 @@ public class DistDataSyntheticGenerator {
         Dataset<String> poiTriplesDF = spark.createDataset(poiTriplesRDD.rdd(), Encoders.STRING());
         poiTriplesDF.write().parquet(hdfsOutputPath + Shape.POINT.name());
         long poiEnd = System.nanoTime();
+        g.poiRDD.unpersist();
+        g.poiRDD = null;
         long poiDuration = poiEnd - poiStart;
         long poiSecs = (long) (poiDuration / Math.pow(10, 9));
         long poiMins = (poiSecs / 60);
         poiSecs = poiSecs - (poiMins * 60);
+
+        runGC();
 
         // Roads generation
         long roadStart = System.nanoTime();
@@ -508,10 +530,15 @@ public class DistDataSyntheticGenerator {
         Dataset<String> roadTriplesDF = spark.createDataset(roadTriplesRDD.rdd(), Encoders.STRING());
         roadTriplesDF.write().parquet(hdfsOutputPath + Shape.LINESTRING.name());
         long roadEnd = System.nanoTime();
+        g.roadRDD.unpersist();
+        g.roadRDD = null;
         long roadDuration = roadEnd - roadStart;
         long roadSecs = (long) (roadDuration / Math.pow(10, 9));
         long roadMins = (roadSecs / 60);
         roadSecs = roadSecs - (roadMins * 60);
+
+        runGC();
+
         logger.info("Maximum tag generated: " + g.MAX_TAG_VALUE);
         logger.info("Execution time : " + landOwnershipMins + "min " + landOwnershipSecs + "sec");
         logger.info("num of partitions of g.landOwnershipRDD = " + landOwnershipPartitions);
@@ -523,5 +550,16 @@ public class DistDataSyntheticGenerator {
         logger.info("num of partitions of g.stateRDD = " + poiPartitions);
         logger.info("Execution time : " + roadMins + "min " + roadSecs + "sec");
         logger.info("num of partitions of g.roadRDD = " + roadPartitions);
+    }
+
+    static public void runGC() {
+        Runtime runtime = Runtime.getRuntime();
+        long memoryMax = runtime.maxMemory();
+        long memoryUsed = runtime.totalMemory() - runtime.freeMemory();
+        double memoryUsedPercent = (memoryUsed * 100.0) / memoryMax;
+        logger.info("DBG-10 : JVM % of memory used = " + memoryUsedPercent);
+        if (memoryUsedPercent > 90.0) {
+            System.gc();
+        }
     }
 }

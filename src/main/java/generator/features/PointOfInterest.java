@@ -6,7 +6,6 @@
 package generator.features;
 
 import generator.DistDataSyntheticGenerator;
-import geomshape.gHexagon;
 import geomshape.gPoint;
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -33,14 +32,14 @@ public class PointOfInterest implements Serializable {    // Small Hexagon
     //gHexagon hex;
     long id;
     double x, y;
-    DistDataSyntheticGenerator g;
+    int MAX_TAG_VALUE;
 
     // ----- CONSTRUCTORS -----
     public PointOfInterest(double x, double y, DistDataSyntheticGenerator g) {
         this.id = getClassInstanceId(); // get id and increment it
         this.x = x;
         this.y = y;
-        this.g = g;
+        this.MAX_TAG_VALUE = g.TAG_VALUE.getValue();
     }
 
     // ----- DATA ACCESSORS -----
@@ -53,7 +52,6 @@ public class PointOfInterest implements Serializable {    // Small Hexagon
         String prefixIdTag = prefix + id + "/tag/";
         String prefixIdTagId;
         String wkt = new gPoint(x, y).getWKT();
-        int MAX_TAG_VALUE = g.TAG_VALUE.getValue();
 
         // feature is class
         triples.add("<" + prefixID + "/> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <" + prefix + className + "> .");

@@ -27,19 +27,21 @@ public class State implements Serializable {    // Small Hexagon
     static synchronized long getClassInstanceId() {
         return ++classInstanceId;
     }
-    
+
     // ----- DATA MEMBERS -----
     //gHexagon hex;
     long id;
     double x, y;
-    DistDataSyntheticGenerator g;
+    double hexSide;
+    int MAX_TAG_VALUE;
 
     // ----- CONSTRUCTORS -----
     public State(double x, double y, DistDataSyntheticGenerator g) {
         this.id = getClassInstanceId(); // get id and increment it
         this.x = x;
         this.y = y;
-        this.g = g;
+        hexSide = g.LARGE_HEX_SIDE.getValue();
+        MAX_TAG_VALUE = g.TAG_VALUE.getValue();
     }
 
     // ----- DATA ACCESSORS -----
@@ -51,9 +53,7 @@ public class State implements Serializable {    // Small Hexagon
         String prefixGeometryId = prefix + "geometry/" + id;
         String prefixIdTag = prefix + id + "/tag/";
         String prefixIdTagId;
-        double hexSide = g.LARGE_HEX_SIDE.getValue();
         String wkt = new gHexagon(x, y, hexSide).getWKT();
-        int MAX_TAG_VALUE = g.TAG_VALUE.getValue();
 
         // feature is class
         triples.add("<" + prefixID + "/> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <" + prefix + className + "> .");

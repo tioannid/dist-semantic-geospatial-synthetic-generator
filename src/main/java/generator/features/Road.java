@@ -7,7 +7,6 @@ package generator.features;
 
 import generator.DistDataSyntheticGenerator;
 import geomshape.gLinestring;
-import geomshape.gPoint;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -33,7 +32,10 @@ public class Road implements Serializable {    // Small Hexagon
     long id;
     double x, y, e;
     boolean forward, vertical;
-    DistDataSyntheticGenerator g;
+    double hexSide;
+    long N;
+    double maxX, maxY;
+    int MAX_TAG_VALUE;
 
     // ----- CONSTRUCTORS -----
     public Road(double x, double y, double e,
@@ -44,7 +46,11 @@ public class Road implements Serializable {    // Small Hexagon
         this.e = e;
         this.forward = forward;
         this.vertical = vertical;
-        this.g = g;
+        hexSide = g.SMALL_HEX_SIDE.getValue();
+        N = g.SMALL_HEX_PER_AXIS.getValue();
+        maxX = g.MAXX.getValue();
+        maxY = g.MAXY.getValue();
+        MAX_TAG_VALUE = g.TAG_VALUE.getValue();
     }
 
     // ----- DATA ACCESSORS -----
@@ -56,13 +62,8 @@ public class Road implements Serializable {    // Small Hexagon
         String prefixGeometryId = prefix + "geometry/" + id;
         String prefixIdTag = prefix + id + "/tag/";
         String prefixIdTagId;
-        double hexSide = g.SMALL_HEX_SIDE.getValue();
-        long N = g.SMALL_HEX_PER_AXIS.getValue();
-        double maxX = g.MAXX.getValue();
-        double maxY = g.MAXY.getValue();
         String wkt = new gLinestring(x, y, hexSide, e, forward, vertical,
                 N, maxX, maxY).getWKT();
-        int MAX_TAG_VALUE = g.TAG_VALUE.getValue();
 
         // feature is class
         triples.add("<" + prefixID + "/> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <" + prefix + className + "> .");
