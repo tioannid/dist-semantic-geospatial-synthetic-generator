@@ -15,16 +15,22 @@ import generator.features.PointOfInterest;
 import generator.features.Road;
 import generator.features.State;
 import generator.features.StateCenter;
+import geomshape.Shape;
 import geomshape.gHexagon;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import org.apache.hadoop.fs.Path;
 
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.serializer.KryoRegistrator;
 import org.apache.spark.sql.Dataset;
@@ -38,9 +44,6 @@ import utils.Utils;
 public class DistDataSyntheticGenerator {
 
     private static final org.apache.log4j.Logger logger = org.apache.log4j.Logger.getLogger("DistDataSyntheticGenerator");
-
-    String unit = "<http://www.opengis.net/def/uom/OGC/1.0/metre>";
-//	final String unit = "<http://www.opengis.net/def/uom/OGC/1.0/degree>";
 
     // our Universe!
     double minX = 0;
@@ -62,76 +65,35 @@ public class DistDataSyntheticGenerator {
     // FORMULA 3:   t=d/sqrt(3)
     // Landownership = small hexagon, data members
     // Number of hexagons(land ownerships) per axis :)
-    long smallHexagonsPerAxis;
-
-    public Broadcast<Long> SMALL_HEX_PER_AXIS;
-
+    int smallHexagonsPerAxis;
+    public Broadcast<Integer> SMALL_HEX_PER_AXIS;
     public Broadcast<Double> SMALL_HEX_SIDE;
-
     // State = large hexagon, data members
     public Broadcast<Double> LARGE_HEX_SIDE;
-
     public Broadcast<Double> MAXX, MAXY;
-
-    // all supported types
-    enum Shape {
-        HEXAGON_SMALL, HEXAGON_LARGE, LINESTRING, POINT, HEXAGON_LARGE_CENTER
-    };
-    HashMap<Shape, String> namedGraphs = new HashMap<DistDataSyntheticGenerator.Shape, String>() {
-        {
-            put(Shape.HEXAGON_SMALL, "http://geographica.di.uoa.gr/generator/landOwnership");
-            put(Shape.HEXAGON_LARGE, "http://geographica.di.uoa.gr/generator/state");
-            put(Shape.LINESTRING, "http://geographica.di.uoa.gr/generator/road");
-            put(Shape.POINT, "http://geographica.di.uoa.gr/generator/pointOfInterest");
-            put(Shape.HEXAGON_LARGE_CENTER, "http://geographica.di.uoa.gr/generator/stateCenter");
-        }
-    };
-
-    // the extension functions that will be used for generating queries
-    enum TopologicalFunction {
-        INTERSECTS, TOUCHES, WITHIN
-    };
-    HashMap<TopologicalFunction, String> extensionFunctions = new HashMap<TopologicalFunction, String>() {
-        {
-            put(TopologicalFunction.INTERSECTS, "geof:sfIntersects");
-            put(TopologicalFunction.TOUCHES, "geof:sfTouches");
-            put(TopologicalFunction.WITHIN, "geof:sfWithin");
-        }
-    };
-
-    // prefixes
-    String prefixes = " PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> \n"
-            + " PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n"
-            + " PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> \n"
-            + " PREFIX strdf: <http://strdf.di.uoa.gr/ontology#> \n"
-            + " PREFIX geof: <http://www.opengis.net/def/function/geosparql/> \n"
-            + " PREFIX geo: <http://www.opengis.net/ont/geosparql#> \n"
-            + " PREFIX geo-sf: <http://www.opengis.net/ont/sf#> \n";
 
     // folder where the output files will be stored
     // one file per geometry type will be created
     Path output;
 
     // maximum tag value
-    Integer MAX_TAG_VALUE = 8192;
+    Integer MAX_TAG_VALUE;
     public Broadcast<Integer> TAG_VALUE;
 
-    //private double[] selectivities = new double[]{0.4, 0.3, 0.2, 0.1,  0.001};
-    double[] selectivities = new double[]{1, 0.75, 0.5, 0.25, 0.1, 0.001};
-
-    JavaRDD<LandOwnership> landOwnershipRDD;
-    JavaRDD<State> stateRDD;
-    JavaRDD<StateCenter> stateCenterRDD;
-    JavaRDD<PointOfInterest> poiRDD;
     JavaRDD<Road> roadRDD;
 
     static SparkConf conf;
     static JavaSparkContext sc;
     static SparkSession spark;
 
-    static long InitialFreeMemory = 0;
-    static long TotalMemory = 0;
-    static long MaxHeapMemoryUsed = 0;
+    List<Integer> landOwnershipRowList;
+    JavaRDD<Integer> landOwnershipRowRDD;
+    List<Integer> stateRowList;
+    JavaRDD<Integer> stateRowRDD;
+    List<Integer> stateCenterRowList;
+    JavaRDD<Integer> stateCenterRowRDD;
+    List<Integer> poiRowList;
+    JavaRDD<Integer> poiRowRDD;
 
     // ----- CONSTRUCTORS -----
     /**
@@ -140,17 +102,18 @@ public class DistDataSyntheticGenerator {
      * generated along an axis. smallHexagonsPerAxis^2 hexagons will be
      * generated.
      */
-    public DistDataSyntheticGenerator(String hdfsOutputPath, long smallHexagonsPerAxis) {
+    public DistDataSyntheticGenerator(String hdfsOutputPath, int smallHexagonsPerAxis) {
         this.smallHexagonsPerAxis = smallHexagonsPerAxis;
         output = new Path(hdfsOutputPath);
-        while (smallHexagonsPerAxis < MAX_TAG_VALUE) {
-            MAX_TAG_VALUE >>= 1; // divide by 2
-            //MAX_TAG_VALUE = MAX_TAG_VALUE / 2;
-        }
+        this.MAX_TAG_VALUE = smallHexagonsPerAxis;
+//        while (smallHexagonsPerAxis < MAX_TAG_VALUE) {
+//            MAX_TAG_VALUE >>= 1; // divide by 2
+//            //MAX_TAG_VALUE = MAX_TAG_VALUE / 2;
+//        }
     }
 
     // ----- DATA ACCESSORS -----
-    public long getSmallHexagonsPerAxis() {
+    public int getSmallHexagonsPerAxis() {
         return smallHexagonsPerAxis;
     }
 
@@ -171,7 +134,7 @@ public class DistDataSyntheticGenerator {
     }
 
     // ----- METHODS -----
-    public long getLargeHexagonsPerAxis() {
+    public int getLargeHexagonsPerAxis() {
         return (getSmallHexagonsPerAxis() / 3);
     }
 
@@ -181,6 +144,369 @@ public class DistDataSyntheticGenerator {
 
     public double getLargeHexagonDx() {
         return (3 * getSmallHexagonDx());
+    }
+
+    static class GetLandOwnershipTriples implements FlatMapFunction<Integer, String> {
+
+        private final int n, maxtag;
+        private final double dx, side, x, y;
+
+        public GetLandOwnershipTriples(int n, double dx, double side, int maxtag) {
+            this.n = n;
+            this.dx = dx;
+            this.side = side;
+            this.x = dx / 2;
+            this.y = side;
+            this.maxtag = maxtag;
+        }
+
+        @Override
+        public Iterator<String> call(Integer row) throws Exception {
+            Set<String> triples = new HashSet();
+            LandOwnership lndown = null;
+            double dy = (3d * y / 2d);
+            double rowx, rowy = y + (row.intValue() - 1) * dy;
+
+            //generate a line
+            if (row % 2 == 1) {
+                rowx = x;
+            } else {
+                rowx = x + (dx / 2d);
+            }
+            for (int col = 1; col <= n; col++) {
+                lndown = new LandOwnership(rowx, rowy, side, maxtag);
+                triples.addAll(lndown.getTriplesList());
+                rowx += dx;
+            }
+            return triples.iterator();
+        }
+    }
+
+    static class GetStateTriples implements FlatMapFunction<Integer, String> {
+
+        private final int n, maxtag;
+        private final double dx, side, x, y;
+
+        public GetStateTriples(int n, double dx, double side, int maxtag) {
+            this.n = n;
+            this.dx = dx;
+            this.side = side;
+            this.x = dx / 2;
+            this.y = side;
+            this.maxtag = maxtag;
+        }
+
+        @Override
+        public Iterator<String> call(Integer row) throws Exception {
+            Set<String> triples = new HashSet();
+            State state = null;
+            double dy = (3d * y / 2d);
+            double rowx, rowy = y + (row.intValue() - 1) * dy;
+
+            //generate a line
+            if (row % 2 == 1) {
+                rowx = x;
+            } else {
+                rowx = x + (dx / 2d);
+            }
+            for (int col = 1; col <= n; col++) {
+                state = new State(rowx, rowy, side, maxtag);
+                triples.addAll(state.getTriplesList());
+                rowx += dx;
+            }
+            return triples.iterator();
+        }
+    }
+
+    static class GetStateCenterTriples implements FlatMapFunction<Integer, String> {
+
+        private final int n, maxtag;
+        private final double dx, x, y;
+
+        public GetStateCenterTriples(int n, double dx, double side, int maxtag) {
+            this.n = n;
+            this.dx = dx;
+            this.x = dx / 2;
+            this.y = side;
+            this.maxtag = maxtag;
+        }
+
+        @Override
+        public Iterator<String> call(Integer row) throws Exception {
+            Set<String> triples = new HashSet();
+            StateCenter stateCenter = null;
+            double dy = (3d * y / 2d);
+            double rowx, rowy = y + (row.intValue() - 1) * dy;
+
+            //generate a line
+            if (row % 2 == 1) {
+                rowx = x;
+            } else {
+                rowx = x + (dx / 2d);
+            }
+            for (int col = 1; col <= n; col++) {
+                stateCenter = new StateCenter(rowx, rowy, maxtag);
+                triples.addAll(stateCenter.getTriplesList());
+                rowx += dx;
+            }
+            return triples.iterator();
+        }
+    }
+
+    static class GetPoiTriples implements FlatMapFunction<Integer, String> {
+
+        private final int n, maxtag;
+        private final double dy, maxX, minX, minY;
+
+        public GetPoiTriples(int n, double dy, double maxX, double minX, double minY, int maxtag) {
+            this.n = n;
+            this.dy = dy;
+            this.maxX = maxX;
+            this.minX = minX;
+            this.minY = minY;
+            this.maxtag = maxtag;
+        }
+
+        @Override
+        public Iterator<String> call(Integer row) throws Exception {
+            Set<String> triples = new HashSet();
+            PointOfInterest poi = null;
+            double maxDx, x1, x2, y1, y2, slope, dx, x3, y3, tmp;
+            maxDx = (maxX - minX) / ((double) n);
+            dx = maxDx / (double) n;
+            y2 = dy * ((double) n);
+            x1 = minX + (double) (row.intValue() - 1) * maxDx;
+            y1 = minY;
+            x2 = x1 + maxDx;
+            slope = (y2 - y1) / maxDx;
+            for (int col = 1; col <= n; col++) {
+                tmp = (double) col * dx;
+                x3 = x1 + tmp;
+                y3 = slope * tmp + y1;
+                poi = new PointOfInterest(x3, y3, maxtag);
+                triples.addAll(poi.getTriplesList());
+            }
+            return triples.iterator();
+        }
+    }
+
+    /**
+     *
+     */
+    public static void main(String[] args) {
+        // check number of arguments
+        if (args.length < 4) {
+            System.err.println("Usage: SyntheticGenerator <FILEFORMAT> <OUTPUTPATH> <N> <PARTITIONS>");
+            System.err.println("       where <FILEFORMAT> is the file format {text | parquet} for the output files,");
+            System.err.println("       where <OUTPUT PATH> is the folder where the generated RDF files will be stored,");
+            System.err.println("             <N> is number of generated land ownership (small hexagons) along the x axis");
+            System.err.println("             <PARTITIONS> is number of partitions to use");
+        }
+        // read arguments
+        String fileFormat = args[0];
+        String hdfsOutputPath = args[1];
+        int N = Integer.parseInt(args[2]);
+        int partitions = new Integer(args[3]);
+
+        // check if fileFormat is correct
+        if (!(fileFormat.equals("text") || fileFormat.equals("parquet"))) {
+            System.err.println("Usage: SyntheticGenerator <FILEFORMAT> <OUTPUTPATH> <N> <PARTITIONS>");
+            System.err.println("       where <FILEFORMAT> is the file format {text | parquet} for the output files,");
+            System.err.println("       where <OUTPUT PATH> is the folder where the generated RDF files will be stored,");
+            System.err.println("             <N> is number of generated land ownership (small hexagons) along the x axis");
+            System.err.println("             <PARTITIONS> is number of partitions to use");
+        }
+
+        // create Spark session, Java spark context and Spark conf
+        spark = SparkSession.builder().appName("Distributed Synthetic Generator - " + Utils.prettyPrint(args))
+                .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+                .config("spark.kryo.registrator", AvgRegistrator.class.getName())
+                .getOrCreate();
+        sc = JavaSparkContext.fromSparkContext(spark.sparkContext());
+        conf = sc.getConf();
+
+        // start time measurement for the main part of the program
+        long startTime = System.nanoTime();
+        DistDataSyntheticGenerator g = new DistDataSyntheticGenerator(hdfsOutputPath, N);
+        g.SMALL_HEX_PER_AXIS = sc.broadcast(g.smallHexagonsPerAxis);
+        g.MAXX = sc.broadcast(g.maxX);
+        g.MAXY = sc.broadcast(g.maxY);
+        g.TAG_VALUE = sc.broadcast(g.MAX_TAG_VALUE);
+        g.SMALL_HEX_SIDE = sc.broadcast(g.getSmallHexagonSide());
+        g.LARGE_HEX_SIDE = sc.broadcast(g.getLargeHexagonSide());
+
+        // ----------------- 1) Land Ownership generation ----------------
+        long landOwnershipStart = System.nanoTime();
+        // create a list of land ownership rows 
+        g.landOwnershipRowList = new ArrayList<>();
+        for (int i = 1; i <= g.getSmallHexagonsPerAxis(); i++) {
+            g.landOwnershipRowList.add(i);
+        }
+        // parallelize Land Ownerships
+        g.landOwnershipRowRDD = (partitions != 0)
+                ? sc.parallelize(g.landOwnershipRowList, partitions)
+                : sc.parallelize(g.landOwnershipRowList);
+        // produce Land Ownership triples
+        JavaRDD<String> landOwnershipTriplesRDD
+                = g.landOwnershipRowRDD.flatMap(
+                        new GetLandOwnershipTriples(
+                                g.getSmallHexagonsPerAxis(),
+                                g.getSmallHexagonDx(),
+                                g.getSmallHexagonSide(),
+                                g.MAX_TAG_VALUE.intValue()));
+        logger.info("num of partitions of landOwnershipTriplesRDD = " + landOwnershipTriplesRDD.getNumPartitions());
+        // store Land Ownership triples to HDFS file
+        Dataset<String> landOwnershipTriplesDF = spark.createDataset(landOwnershipTriplesRDD.rdd(), Encoders.STRING());
+        if (fileFormat.equalsIgnoreCase("text")) {
+            landOwnershipTriplesDF.write().text(hdfsOutputPath + Shape.HEXAGON_SMALL.name());
+        } else if (fileFormat.equalsIgnoreCase("parquet")) {
+            landOwnershipTriplesDF.write().parquet(hdfsOutputPath + Shape.HEXAGON_SMALL.name());
+        }
+        long landOwnershipEnd = System.nanoTime();
+        g.landOwnershipRowList = null;
+        g.landOwnershipRowRDD = null;
+        landOwnershipTriplesDF = null;
+        long landOwnershipDuration = landOwnershipEnd - landOwnershipStart;
+        long landOwnershipSecs = (long) (landOwnershipDuration / Math.pow(10, 9));
+        long landOwnershipMins = (landOwnershipSecs / 60);
+        landOwnershipSecs = landOwnershipSecs - (landOwnershipMins * 60);
+
+        // ----------------- 2) State generation ----------------
+        long stateStart = System.nanoTime();
+        // create a list of State rows 
+        g.stateRowList = new ArrayList<>();
+        for (int i = 1; i <= (g.getLargeHexagonsPerAxis()); i++) {
+            g.stateRowList.add(i);
+        }
+        // parallelize States
+        g.stateRowRDD = (partitions != 0)
+                ? sc.parallelize(g.stateRowList, partitions)
+                : sc.parallelize(g.stateRowList);
+        // produce State triples
+        JavaRDD<String> stateTriplesRDD
+                = g.stateRowRDD.flatMap(
+                        new GetStateTriples(
+                                g.getLargeHexagonsPerAxis(),
+                                g.getLargeHexagonDx(),
+                                g.getLargeHexagonSide(),
+                                g.MAX_TAG_VALUE.intValue()));
+        logger.info("num of partitions of stateTriplesRDD = " + stateTriplesRDD.getNumPartitions());
+        // store State triples to HDFS file
+        Dataset<String> stateTriplesDF = spark.createDataset(stateTriplesRDD.rdd(), Encoders.STRING());
+        if (fileFormat.equalsIgnoreCase("text")) {
+            stateTriplesDF.write().text(hdfsOutputPath + Shape.HEXAGON_LARGE.name());
+        } else if (fileFormat.equalsIgnoreCase("parquet")) {
+            stateTriplesDF.write().parquet(hdfsOutputPath + Shape.HEXAGON_LARGE.name());
+        }
+        long stateEnd = System.nanoTime();
+        g.stateRowList = null;
+        g.stateRowRDD = null;
+        stateTriplesDF = null;
+        long stateDuration = stateEnd - stateStart;
+        long stateSecs = (long) (stateDuration / Math.pow(10, 9));
+        long stateMins = (stateSecs / 60);
+        stateSecs = stateSecs - (stateMins * 60);
+
+        // ----------------- 3) State Center generation ----------------
+        long stateCenterStart = System.nanoTime();
+        // create a list of State Center rows 
+        g.stateCenterRowList = new ArrayList<>();
+        for (int i = 1; i <= (g.getLargeHexagonsPerAxis()); i++) {
+            g.stateCenterRowList.add(i);
+        }
+        // parallelize State Centers
+        g.stateCenterRowRDD = (partitions != 0)
+                ? sc.parallelize(g.stateCenterRowList, partitions)
+                : sc.parallelize(g.stateCenterRowList);
+        // produce State Center triples
+        JavaRDD<String> stateCenterTriplesRDD
+                = g.stateCenterRowRDD.flatMap(
+                        new GetStateCenterTriples(
+                                g.getLargeHexagonsPerAxis(),
+                                g.getLargeHexagonDx(),
+                                g.getLargeHexagonSide(),
+                                g.MAX_TAG_VALUE.intValue()));
+        logger.info("num of partitions of stateCenterTriplesRDD = " + stateCenterTriplesRDD.getNumPartitions());
+        // store State Center triples to HDFS file
+        Dataset<String> stateCenterTriplesDF = spark.createDataset(stateCenterTriplesRDD.rdd(), Encoders.STRING());
+        if (fileFormat.equalsIgnoreCase("text")) {
+            stateCenterTriplesDF.write().text(hdfsOutputPath + Shape.HEXAGON_LARGE_CENTER.name());
+        } else if (fileFormat.equalsIgnoreCase("parquet")) {
+            stateCenterTriplesDF.write().parquet(hdfsOutputPath + Shape.HEXAGON_LARGE_CENTER.name());
+        }
+        long stateCenterEnd = System.nanoTime();
+        g.stateCenterRowList = null;
+        g.stateCenterRowRDD = null;
+        stateCenterTriplesDF = null;
+        long stateCenterDuration = stateCenterEnd - stateCenterStart;
+        long stateCenterSecs = (long) (stateCenterDuration / Math.pow(10, 9));
+        long stateCenterMins = (stateCenterSecs / 60);
+        stateCenterSecs = stateCenterSecs - (stateCenterMins * 60);
+
+        // ----------------- 4) Points of Interest generation ----------------
+        long poiStart = System.nanoTime();
+        // create a list of Points of Interest rows 
+        g.poiRowList = new ArrayList<>();
+        for (int i = 1; i <= g.getSmallHexagonsPerAxis(); i++) {
+            g.poiRowList.add(i);
+        }
+        // parallelize Points of Interest
+        g.poiRowRDD = (partitions != 0)
+                ? sc.parallelize(g.poiRowList, partitions)
+                : sc.parallelize(g.poiRowList);
+        // produce Points of Interest triples
+        JavaRDD<String> poiTriplesRDD
+                = g.poiRowRDD.flatMap(
+                        new GetPoiTriples(
+                                g.getSmallHexagonsPerAxis(),
+                                g.getSmallHexagonDy(),
+                                g.maxX,
+                                g.minX,
+                                g.minY,
+                                g.MAX_TAG_VALUE.intValue()));
+        logger.info("num of partitions of poiTriplesRDD = " + poiTriplesRDD.getNumPartitions());
+        // store Points of Interest triples to HDFS file
+        Dataset<String> poiTriplesDF = spark.createDataset(poiTriplesRDD.rdd(), Encoders.STRING());
+        if (fileFormat.equalsIgnoreCase("text")) {
+            poiTriplesDF.write().text(hdfsOutputPath + Shape.POINT.name());
+        } else if (fileFormat.equalsIgnoreCase("parquet")) {
+            poiTriplesDF.write().parquet(hdfsOutputPath + Shape.POINT.name());
+        }
+        long poiEnd = System.nanoTime();
+        g.poiRowList = null;
+        g.poiRowRDD = null;
+        poiTriplesDF = null;
+        long poiDuration = poiEnd - poiStart;
+        long poiSecs = (long) (poiDuration / Math.pow(10, 9));
+        long poiMins = (poiSecs / 60);
+        poiSecs = poiSecs - (poiMins * 60);
+
+        runGC();
+
+        // Roads generation
+        long roadStart = System.nanoTime();
+        try {
+            g.roadRDD = (partitions != 0)
+                    ? sc.parallelize(g.generateRoads(), partitions)
+                    : sc.parallelize(g.generateRoads());
+        } catch (IOException ex) {
+            logger.error(ex.getMessage());
+        }
+        JavaRDD<String> roadTriplesRDD = g.roadRDD.flatMap(road -> road.getTriples());
+        logger.info("num of partitions of roadTriplesRDD = " + roadTriplesRDD.getNumPartitions());
+        Dataset<String> roadTriplesDF = spark.createDataset(roadTriplesRDD.rdd(), Encoders.STRING());
+        if (fileFormat.equalsIgnoreCase("text")) {
+            roadTriplesDF.write().text(hdfsOutputPath + Shape.LINESTRING.name());
+        } else if (fileFormat.equalsIgnoreCase("parquet")) {
+            roadTriplesDF.write().parquet(hdfsOutputPath + Shape.LINESTRING.name());
+        }
+        long roadEnd = System.nanoTime();
+        g.roadRDD.unpersist();
+        g.roadRDD = null;
+        long roadDuration = roadEnd - roadStart;
+        long roadSecs = (long) (roadDuration / Math.pow(10, 9));
+        long roadMins = (roadSecs / 60);
+        roadSecs = roadSecs - (roadMins * 60);
     }
 
     /**
@@ -275,8 +601,9 @@ public class DistDataSyntheticGenerator {
      */
     public List<PointOfInterest> generatePOIs() throws IOException {
         List<PointOfInterest> poiList = new ArrayList<>();
-        double maxDx = (maxX - minX) / ((double) this.smallHexagonsPerAxis);
-        double x1, x2, y1, y2, slope, dx, x3, y3;
+        double maxDx, x1, x2, y1, y2, slope, dx, x3, y3;
+        maxDx = (maxX - minX) / ((double) this.smallHexagonsPerAxis);
+        dx = maxDx / (double) this.smallHexagonsPerAxis;
         y2 = this.getSmallHexagonDy() * ((double) this.smallHexagonsPerAxis); //maxy
         for (int i = 0; i < this.smallHexagonsPerAxis; i++) {
             x1 = minX + (double) i * maxDx;
@@ -284,7 +611,6 @@ public class DistDataSyntheticGenerator {
             x2 = x1 + maxDx;
             // y2 is constant to the maximum y
             slope = (y2 - y1) / maxDx;
-            dx = maxDx / (double) this.smallHexagonsPerAxis;
             for (int j = 1; j <= this.smallHexagonsPerAxis; j++) {
                 double tmp = (double) j * dx;
                 x3 = x1 + tmp;
@@ -336,10 +662,6 @@ public class DistDataSyntheticGenerator {
         return this.MAX_TAG_VALUE;
     }
 
-    public double[] returnSelectivities() {
-        return this.selectivities;
-    }
-
     public static class AvgRegistrator implements KryoRegistrator {
 
         @Override
@@ -347,209 +669,6 @@ public class DistDataSyntheticGenerator {
             kryo.register(LandOwnership.class, new FieldSerializer(kryo, LandOwnership.class));
             kryo.register(gHexagon.class, new FieldSerializer(kryo, gHexagon.class));
         }
-    }
-
-    /**
-     *
-     */
-    public static void main(String[] args) {
-        TotalMemory = Runtime.getRuntime().totalMemory();
-        InitialFreeMemory = Runtime.getRuntime().freeMemory();
-        logger.info("DBG-10 : JVM total memory = " + TotalMemory);
-        logger.info("DBG-10 : JVM initial free memory = " + InitialFreeMemory);
-
-        // check number of arguments
-        if (args.length < 3) {
-            System.err.println("Usage: SyntheticGenerator <OUTPUTPATH> <N> <PARTITIONS>");
-            System.err.println("       where <OUTPUT PATH> is the folder where the generated RDF files will be stored,");
-            System.err.println("             <N> is number of generated land ownership (small hexagons) along the x axis");
-            System.err.println("             <PARTITIONS> is number of partitions to use");
-        }
-        // read arguments
-        String hdfsOutputPath = args[0];
-        int N = new Integer(args[1]);
-        int partitions = new Integer(args[2]);
-
-        // create Spark session, Java spark context and Spark conf
-        spark = SparkSession.builder().appName("Distributed Synthetic Generator - " + Utils.prettyPrint(args))
-                .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-                .config("spark.kryo.registrator", AvgRegistrator.class.getName())
-                .getOrCreate();
-        sc = JavaSparkContext.fromSparkContext(spark.sparkContext());
-        conf = sc.getConf();
-
-        // start time measurement for the main part of the program
-        long startTime = System.nanoTime();
-        DistDataSyntheticGenerator g = new DistDataSyntheticGenerator(hdfsOutputPath, N);
-        g.SMALL_HEX_PER_AXIS = sc.broadcast(g.smallHexagonsPerAxis);
-        g.MAXX = sc.broadcast(g.maxX);
-        g.MAXY = sc.broadcast(g.maxY);
-        g.TAG_VALUE = sc.broadcast(g.MAX_TAG_VALUE);
-        g.SMALL_HEX_SIDE = sc.broadcast(g.getSmallHexagonSide());
-        g.LARGE_HEX_SIDE = sc.broadcast(g.getLargeHexagonSide());
-        long landOwnershipPartitions = 0;
-        long statePartitions = 0;
-        long stateCenterPartitions = 0;
-        long poiPartitions = 0;
-        long roadPartitions = 0;
-
-        // Land Ownership generation
-        long landOwnershipStart = System.nanoTime();
-        try {
-            logger.info("-------------------------------------");
-            logger.info("Generating " + Math.pow(g.getSmallHexagonsPerAxis(), 2) + " land ownerships (small hexagons)...");
-            if (partitions != 0) {
-                g.landOwnershipRDD = sc.parallelize(g.generateLandOwnerships(), partitions);
-            } else {
-                g.landOwnershipRDD = sc.parallelize(g.generateLandOwnerships());
-            }
-            landOwnershipPartitions = g.landOwnershipRDD.getNumPartitions();
-            System.out.print("\n");
-            logger.info("-------------------------------------");
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-        }
-        JavaRDD<String> landOwnershipTriplesRDD = g.landOwnershipRDD.flatMap(lndown -> lndown.getTriples());
-        logger.info("num of partitions of smallHexTriplesRDD = " + landOwnershipTriplesRDD.getNumPartitions());
-        Dataset<String> landOwnershipTriplesDF = spark.createDataset(landOwnershipTriplesRDD.rdd(), Encoders.STRING());
-        landOwnershipTriplesDF.write().parquet(hdfsOutputPath + Shape.HEXAGON_SMALL.name());
-        long landOwnershipEnd = System.nanoTime();
-        g.landOwnershipRDD.unpersist();
-        g.landOwnershipRDD = null;
-        long landOwnershipDuration = landOwnershipEnd - landOwnershipStart;
-        long landOwnershipSecs = (long) (landOwnershipDuration / Math.pow(10, 9));
-        long landOwnershipMins = (landOwnershipSecs / 60);
-        landOwnershipSecs = landOwnershipSecs - (landOwnershipMins * 60);
-
-        runGC();
-
-        // State generation
-        long stateStart = System.nanoTime();
-        try {
-            logger.info("Generating " + Math.pow(g.getLargeHexagonsPerAxis(), 2) + " states (large hexagons)...");
-            g.stateRDD = (partitions != 0)
-                    ? sc.parallelize(g.generateStates(), partitions)
-                    : sc.parallelize(g.generateStates());
-            statePartitions = g.stateRDD.getNumPartitions();
-            System.out.print("\n");
-            logger.info("-------------------------------------");
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-        }
-        JavaRDD<String> stateTriplesRDD = g.stateRDD.flatMap(state -> state.getTriples());
-        logger.info("num of partitions of largeHexTriplesRDD = " + stateTriplesRDD.getNumPartitions());
-        Dataset<String> stateTriplesDF = spark.createDataset(stateTriplesRDD.rdd(), Encoders.STRING());
-        stateTriplesDF.write().parquet(hdfsOutputPath + Shape.HEXAGON_LARGE.name());
-        long stateEnd = System.nanoTime();
-        g.stateRDD.unpersist();
-        g.stateRDD = null;
-        long stateDuration = stateEnd - stateStart;
-        long stateSecs = (long) (stateDuration / Math.pow(10, 9));
-        long stateMins = (stateSecs / 60);
-        stateSecs = stateSecs - (stateMins * 60);
-
-        runGC();
-
-        // State Center generation
-        long stateCenterStart = System.nanoTime();
-        try {
-            logger.info("-------------------------------------");
-            logger.info("Generating " + Math.pow(g.getLargeHexagonsPerAxis(), 2) + " state center (points)...");
-            g.stateCenterRDD = (partitions != 0)
-                    ? sc.parallelize(g.generateStateCenters(), partitions)
-                    : sc.parallelize(g.generateStateCenters());
-            stateCenterPartitions = g.stateCenterRDD.getNumPartitions();
-            System.out.print("\n");
-            logger.info("-------------------------------------");
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-        }
-        JavaRDD<String> stateCenterTriplesRDD = g.stateCenterRDD.flatMap(stateCenter -> stateCenter.getTriples());
-        logger.info("num of partitions of stateCenterTriplesRDD = " + stateCenterTriplesRDD.getNumPartitions());
-        Dataset<String> stateCenterTriplesDF = spark.createDataset(stateCenterTriplesRDD.rdd(), Encoders.STRING());
-        stateCenterTriplesDF.write().parquet(hdfsOutputPath + Shape.HEXAGON_LARGE_CENTER.name());
-        long stateCenterEnd = System.nanoTime();
-        g.stateCenterRDD.unpersist();
-        g.stateCenterRDD = null;
-        long stateCenterDuration = stateCenterEnd - stateCenterStart;
-        long stateCenterSecs = (long) (stateCenterDuration / Math.pow(10, 9));
-        long stateCenterMins = (stateCenterSecs / 60);
-        stateCenterSecs = stateCenterSecs - (stateCenterMins * 60);
-
-        runGC();
-
-        // Points of Interest generation
-        long poiStart = System.nanoTime();
-        try {
-            logger.info("-------------------------------------");
-            logger.info("Generating " + Math.pow(g.getSmallHexagonsPerAxis(), 2) + " points of interest (points)...");
-            g.poiRDD = (partitions != 0)
-                    ? sc.parallelize(g.generatePOIs(), partitions)
-                    : sc.parallelize(g.generatePOIs());
-            poiPartitions = g.poiRDD.getNumPartitions();
-            System.out.print("\n");
-            logger.info("-------------------------------------");
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-        }
-        JavaRDD<String> poiTriplesRDD = g.poiRDD.flatMap(poi -> poi.getTriples());
-        logger.info("num of partitions of poiTriplesRDD = " + poiTriplesRDD.getNumPartitions());
-        Dataset<String> poiTriplesDF = spark.createDataset(poiTriplesRDD.rdd(), Encoders.STRING());
-        poiTriplesDF.write().parquet(hdfsOutputPath + Shape.POINT.name());
-        long poiEnd = System.nanoTime();
-        g.poiRDD.unpersist();
-        g.poiRDD = null;
-        long poiDuration = poiEnd - poiStart;
-        long poiSecs = (long) (poiDuration / Math.pow(10, 9));
-        long poiMins = (poiSecs / 60);
-        poiSecs = poiSecs - (poiMins * 60);
-
-        runGC();
-
-        // Roads generation
-        long roadStart = System.nanoTime();
-        try {
-            logger.info("-------------------------------------");
-            logger.info("Generating " + g.getSmallHexagonsPerAxis() + " roads (linestrings)...");
-            g.roadRDD = (partitions != 0)
-                    ? sc.parallelize(g.generateRoads(), partitions)
-                    : sc.parallelize(g.generateRoads());
-            roadPartitions = g.roadRDD.getNumPartitions();
-            System.out.print("\n");
-            logger.info("-------------------------------------");
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-        }
-        JavaRDD<String> roadTriplesRDD = g.roadRDD.flatMap(road -> road.getTriples());
-        logger.info("num of partitions of roadTriplesRDD = " + roadTriplesRDD.getNumPartitions());
-        Dataset<String> roadTriplesDF = spark.createDataset(roadTriplesRDD.rdd(), Encoders.STRING());
-        roadTriplesDF.write().parquet(hdfsOutputPath + Shape.LINESTRING.name());
-        long roadEnd = System.nanoTime();
-        g.roadRDD.unpersist();
-        g.roadRDD = null;
-        long roadDuration = roadEnd - roadStart;
-        long roadSecs = (long) (roadDuration / Math.pow(10, 9));
-        long roadMins = (roadSecs / 60);
-        roadSecs = roadSecs - (roadMins * 60);
-
-        runGC();
-
-        logger.info("Maximum tag generated: " + g.MAX_TAG_VALUE);
-        logger.info("Execution time : " + landOwnershipMins + "min " + landOwnershipSecs + "sec");
-        logger.info("num of partitions of g.landOwnershipRDD = " + landOwnershipPartitions);
-        logger.info("Execution time : " + stateMins + "min " + stateSecs + "sec");
-        logger.info("num of partitions of g.stateRDD = " + statePartitions);
-        logger.info("Execution time : " + stateCenterMins + "min " + stateCenterSecs + "sec");
-        logger.info("num of partitions of g.stateRDD = " + stateCenterPartitions);
-        logger.info("Execution time : " + poiMins + "min " + poiSecs + "sec");
-        logger.info("num of partitions of g.stateRDD = " + poiPartitions);
-        logger.info("Execution time : " + roadMins + "min " + roadSecs + "sec");
-        logger.info("num of partitions of g.roadRDD = " + roadPartitions);
     }
 
     static public void runGC() {

@@ -11,6 +11,7 @@ package generator;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.serializers.FieldSerializer;
 import generator.features.LandOwnership;
+import geomshape.Shape;
 import geomshape.gHexagon;
 import java.io.IOException;
 import java.util.Arrays;
@@ -67,11 +68,7 @@ public class DistQuerySyntheticGenerator {
     // Number of hexagons(land ownerships) per axis :)
     long smallHexagonsPerAxis;
 
-    // all supported types
-    enum Shape {
-        HEXAGON_SMALL, HEXAGON_LARGE, LINESTRING, POINT, HEXAGON_LARGE_CENTER
-    };
-    HashMap<Shape, String> namedGraphs = new HashMap<DistQuerySyntheticGenerator.Shape, String>() {
+    HashMap<Shape, String> namedGraphs = new HashMap<Shape, String>() {
         {
             put(Shape.HEXAGON_SMALL, "http://geographica.di.uoa.gr/generator/landOwnership");
             put(Shape.HEXAGON_LARGE, "http://geographica.di.uoa.gr/generator/state");

@@ -27,7 +27,7 @@ public class LandOwnership implements Serializable {    // Small Hexagon
     static synchronized long getClassInstanceId() {
         return ++classInstanceId;
     }
-    
+
     // ----- DATA MEMBERS -----
     //gHexagon hex;
     long id;
@@ -37,11 +37,15 @@ public class LandOwnership implements Serializable {    // Small Hexagon
 
     // ----- CONSTRUCTORS -----
     public LandOwnership(double x, double y, DistDataSyntheticGenerator g) {
+        this(x, y, g.SMALL_HEX_SIDE.getValue(), g.TAG_VALUE.getValue());
+    }
+
+    public LandOwnership(double x, double y, double hexSide, int MAX_TAG_VALUE) {
         this.id = getClassInstanceId(); // get id and increment it
         this.x = x;
         this.y = y;
-        this.hexSide = g.SMALL_HEX_SIDE.getValue();
-        this.MAX_TAG_VALUE = g.TAG_VALUE.getValue();
+        this.hexSide = hexSide;
+        this.MAX_TAG_VALUE = MAX_TAG_VALUE;
     }
 
     // ----- DATA ACCESSORS -----
@@ -79,4 +83,39 @@ public class LandOwnership implements Serializable {    // Small Hexagon
         }
         return triples.iterator();
     }
+
+    public List<String> getTriplesList() {
+        List<String> triples = new ArrayList<>();
+        // some optimizations
+        String prefixID = prefix + id;
+        String prefixGeometryId = prefix + "geometry/" + id;
+        String prefixIdTag = prefix + id + "/tag/";
+        String prefixIdTagId;
+        String wkt = new gHexagon(x, y, hexSide).getWKT();
+
+        // feature is class
+        triples.add("<" + prefixID + "/> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <" + prefix + className + "> .");
+        // feature has geometry
+        triples.add("<" + prefixID + "/> <" + prefix + "hasGeometry> <" + prefixGeometryId + "/> .");
+        // geometry has serialization
+        triples.add("<" + prefixGeometryId + "/> <" + prefix + "asWKT> \"" + wkt + "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .");
+
+        for (int tagId = 1; (id % tagId == 0) && tagId <= MAX_TAG_VALUE; tagId *= 2) {
+            if (tagId > 1 && tagId < MAX_TAG_VALUE) {
+                continue;
+            }
+            // in loop optimization
+            prefixIdTagId = prefixIdTag + tagId;
+            // feature has tagId
+            triples.add("<" + prefixID + "/> <" + prefix + "hasTag> <" + prefixIdTagId + "/> .");
+            // tagId is Tag
+            triples.add("<" + prefixIdTagId + "/> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <" + prefix + "Tag> .");
+            // tagId has key
+            triples.add("<" + prefixIdTagId + "/> <" + prefix + "hasKey> \"" + tagId + "\" .");
+            // tagId has value
+            triples.add("<" + prefixIdTagId + "/> <" + prefix + "hasValue> \"" + tagId + "\" .");
+        }
+        return triples;
+    }
+
 }
