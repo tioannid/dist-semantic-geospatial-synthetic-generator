@@ -23,7 +23,7 @@ Create a synthetic dataset
 The 'DistDataSyntheticGenerator' main class has the following syntax:
 
 	DistDataSyntheticGenerator <FileFormat> <DstDir> <N> <P>
-        <FileFormat> : spark output file format {text | parquet}
+	<FileFormat> : spark output file format {text | parquet}
 	<DstDir> : destination folder in HDFS
 	<N> : dataset scale factor, a value (preferably 2^k) which scales the size of the dataset
 	<P> : number of partitions, to be used for the generation of the 5 data files (0=automatic)
