@@ -53,7 +53,7 @@ Change the N=1024 to a preferebly 2^k value of your choice. For production clust
 
 Create a synthetic queryset
 --------------------------
-The 'DistDataSyntheticGenerator' main class has the following syntax:
+The 'DistQuerySyntheticGenerator' main class has the following syntax:
 
 	DistQuerySyntheticGenerator <DstDir> <N> <S>
 	<DstDir> : destination folder in HDFS
