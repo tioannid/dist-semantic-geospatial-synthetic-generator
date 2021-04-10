@@ -19,6 +19,7 @@ import java.util.HashMap;
 import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileAlreadyExistsException;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
@@ -118,7 +119,7 @@ public class DistQuerySyntheticGenerator {
      * generated along an axis. smallHexagonsPerAxis^2 hexagons will be
      * generated.
      */
-    public DistQuerySyntheticGenerator(String hdfsOutputPath, long smallHexagonsPerAxis,
+    public DistQuerySyntheticGenerator(String hdfsOutputPath, int smallHexagonsPerAxis,
             List<String> spatialSelectiviesList) {
         this.smallHexagonsPerAxis = smallHexagonsPerAxis;
         output = new Path(hdfsOutputPath);
@@ -127,10 +128,11 @@ public class DistQuerySyntheticGenerator {
         for (int i = 0; i < this.selectivities.length; i++) {
             this.selectivities[i] = Double.parseDouble(spatialSelectiviesList.get(i));
         }
-        while (smallHexagonsPerAxis < MAX_TAG_VALUE) {
-            MAX_TAG_VALUE >>= 1; // divide by 2
-            //MAX_TAG_VALUE = MAX_TAG_VALUE / 2;
-        }
+        this.MAX_TAG_VALUE = smallHexagonsPerAxis;
+//        while (smallHexagonsPerAxis < MAX_TAG_VALUE) {
+//            MAX_TAG_VALUE >>= 1; // divide by 2
+//            //MAX_TAG_VALUE = MAX_TAG_VALUE / 2;
+//        }
     }
 
     // ----- DATA ACCESSORS -----
@@ -359,7 +361,7 @@ public class DistQuerySyntheticGenerator {
 
             System.out.println("Start = " + start.toText() + " End = " + end.toText());
             System.out.println("Distance = " + distanceInMeters + "m ");
-        }catch (ParseException | TransformException | FactoryException e) {
+        } catch (ParseException | TransformException | FactoryException e) {
             // TODO Auto-generated catch block
             e.printStackTrace();
         }
@@ -818,7 +820,7 @@ public class DistQuerySyntheticGenerator {
         String spatialSelectiviesArg = args[2];
 
         // read spatial selectivities list
-        List<String> spatialSelectiviesList = Arrays.asList(spatialSelectiviesArg.split(","));
+        List<String> spatialSelectiviesList = Arrays.asList(spatialSelectiviesArg.split(" "));
 
         // create Spark conf and context
         conf = new SparkConf()
@@ -841,6 +843,7 @@ public class DistQuerySyntheticGenerator {
             } else {
                 throw new IOException("Target folder is not a folder but a file!");
             }
+        } catch (FileAlreadyExistsException ex) {
         } catch (IOException ex) {
             logger.error(ex.getMessage());
         }
@@ -850,7 +853,6 @@ public class DistQuerySyntheticGenerator {
         int queryCnt = 0;
         Path queryFilePath = null;
         FSDataOutputStream queryFile = null;
-        String queryName = "";
         for (int function = 0; function < q.length; function++) { // intersect, touch, within
             String[][] queriesForFunction = q[function];
             for (int queryType = 0; queryType < queriesForFunction.length; queryType++) { // selection, join
