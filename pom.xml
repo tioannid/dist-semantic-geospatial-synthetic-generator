@@ -214,7 +214,7 @@
                     </finalName>
                     <archive>
                         <manifest>
-                            <mainClass>generator.SyntheticGenerator</mainClass>
+                            <mainClass>generator.DistDataSyntheticGenerator</mainClass>
                         </manifest>
                     </archive>
                     <descriptorRefs>
