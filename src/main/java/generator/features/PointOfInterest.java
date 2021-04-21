@@ -57,6 +57,10 @@ public class PointOfInterest implements Serializable {    // Small Hexagon
         String prefixIdTagId;
         String wkt = new gPoint(x, y).getWKT();
 
+        if (id == 1) { // insert class level triples
+            triples.add("<" + prefix + "asWKT> <http://www.w3.org/2000/01/rdf-schema#subPropertyOf> <http://www.opengis.net/ont/geosparql#asWKT> .");
+        }
+        
         // feature is class
         triples.add("<" + prefixID + "/> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <" + prefix + className + "> .");
         // feature has geometry
@@ -91,6 +95,10 @@ public class PointOfInterest implements Serializable {    // Small Hexagon
         String prefixIdTagId;
         String wkt = new gPoint(x, y).getWKT();
 
+        if (id == 1) { // insert class level triples
+            triples.add("<" + prefix + "asWKT> <http://www.w3.org/2000/01/rdf-schema#subPropertyOf> <http://www.opengis.net/ont/geosparql#asWKT> .");
+        }
+        
         // feature is class
         triples.add("<" + prefixID + "/> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <" + prefix + className + "> .");
         // feature has geometry
