@@ -14,6 +14,7 @@ import generator.features.LandOwnership;
 import geomshape.Shape;
 import geomshape.gHexagon;
 import java.io.IOException;
+import java.text.DecimalFormatSymbols;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -127,7 +128,9 @@ public class DistQuerySyntheticGenerator {
         this.selectivities = new double[spatialSelectiviesList.size()];
         for (int i = 0; i < this.selectivities.length; i++) {
             this.selectivities[i] = Double.parseDouble(spatialSelectiviesList.get(i));
+            logger.info("Spatial selectivity value [:" + i + "] = " + this.selectivities[i]);
         }
+
         this.MAX_TAG_VALUE = smallHexagonsPerAxis;
 //        while (smallHexagonsPerAxis < MAX_TAG_VALUE) {
 //            MAX_TAG_VALUE >>= 1; // divide by 2
@@ -817,10 +820,17 @@ public class DistQuerySyntheticGenerator {
         // read arguments
         String hdfsOutputPath = args[0];
         int N = new Integer(args[1]);
-        String spatialSelectiviesArg = args[2];
+        // have to remove the initial and trailing double quotes
+        String spatialSelectiviesArg = args[2].replace("\"", "");
+        logger.info("Number of arguments : " + args.length);
+        logger.info("Spatial selectivities argument : " + spatialSelectiviesArg);
 
         // read spatial selectivities list
-        List<String> spatialSelectiviesList = Arrays.asList(spatialSelectiviesArg.split(" "));
+        List<String> spatialSelectiviesList = Arrays.asList(spatialSelectiviesArg.split(","));
+        for (int i = 0; i < spatialSelectiviesList.size(); i++) {
+            logger.info("Spatial selectivity [" + i + "] : " + spatialSelectiviesList.get(i));
+        }
+        logger.info("DecimalFormatSymbols.getDecimalSeparator() = " + DecimalFormatSymbols.getInstance().getDecimalSeparator());
 
         // create Spark conf and context
         conf = new SparkConf()
