@@ -354,12 +354,13 @@ public class DistDataSyntheticGenerator {
                                 g.MAX_TAG_VALUE.intValue()));
         logger.info("num of partitions of landOwnershipTriplesRDD = " + landOwnershipTriplesRDD.getNumPartitions());
         // store Land Ownership triples to HDFS file
-        Dataset<String> landOwnershipTriplesDF = spark.createDataset(landOwnershipTriplesRDD.rdd(), Encoders.STRING());
-        if (fileFormat.equalsIgnoreCase("text")) {
-            landOwnershipTriplesDF.write().text(hdfsOutputPath + Shape.HEXAGON_SMALL.name());
-        } else if (fileFormat.equalsIgnoreCase("parquet")) {
-            landOwnershipTriplesDF.write().parquet(hdfsOutputPath + Shape.HEXAGON_SMALL.name());
-        }
+        Dataset<String> landOwnershipTriplesDF = spark.createDataset(landOwnershipTriplesRDD.rdd(), Encoders.STRING());        
+//        if (fileFormat.equalsIgnoreCase("text")) {
+//            landOwnershipTriplesDF.write().text(hdfsOutputPath + Shape.HEXAGON_SMALL.name());
+//        } else if (fileFormat.equalsIgnoreCase("parquet")) {
+//            landOwnershipTriplesDF.write().parquet(hdfsOutputPath + Shape.HEXAGON_SMALL.name());
+//        }
+        landOwnershipTriplesDF.write().format(fileFormat).save(hdfsOutputPath + Shape.HEXAGON_SMALL.name());
         long landOwnershipEnd = System.nanoTime();
         g.landOwnershipRowList = null;
         g.landOwnershipRowRDD = null;
@@ -391,11 +392,12 @@ public class DistDataSyntheticGenerator {
         logger.info("num of partitions of stateTriplesRDD = " + stateTriplesRDD.getNumPartitions());
         // store State triples to HDFS file
         Dataset<String> stateTriplesDF = spark.createDataset(stateTriplesRDD.rdd(), Encoders.STRING());
-        if (fileFormat.equalsIgnoreCase("text")) {
-            stateTriplesDF.write().text(hdfsOutputPath + Shape.HEXAGON_LARGE.name());
-        } else if (fileFormat.equalsIgnoreCase("parquet")) {
-            stateTriplesDF.write().parquet(hdfsOutputPath + Shape.HEXAGON_LARGE.name());
-        }
+//        if (fileFormat.equalsIgnoreCase("text")) {
+//            stateTriplesDF.write().text(hdfsOutputPath + Shape.HEXAGON_LARGE.name());
+//        } else if (fileFormat.equalsIgnoreCase("parquet")) {
+//            stateTriplesDF.write().parquet(hdfsOutputPath + Shape.HEXAGON_LARGE.name());
+//        }
+        stateTriplesDF.write().format(fileFormat).save(hdfsOutputPath + Shape.HEXAGON_LARGE.name());
         long stateEnd = System.nanoTime();
         g.stateRowList = null;
         g.stateRowRDD = null;
@@ -427,11 +429,12 @@ public class DistDataSyntheticGenerator {
         logger.info("num of partitions of stateCenterTriplesRDD = " + stateCenterTriplesRDD.getNumPartitions());
         // store State Center triples to HDFS file
         Dataset<String> stateCenterTriplesDF = spark.createDataset(stateCenterTriplesRDD.rdd(), Encoders.STRING());
-        if (fileFormat.equalsIgnoreCase("text")) {
-            stateCenterTriplesDF.write().text(hdfsOutputPath + Shape.HEXAGON_LARGE_CENTER.name());
-        } else if (fileFormat.equalsIgnoreCase("parquet")) {
-            stateCenterTriplesDF.write().parquet(hdfsOutputPath + Shape.HEXAGON_LARGE_CENTER.name());
-        }
+//        if (fileFormat.equalsIgnoreCase("text")) {
+//            stateCenterTriplesDF.write().text(hdfsOutputPath + Shape.HEXAGON_LARGE_CENTER.name());
+//        } else if (fileFormat.equalsIgnoreCase("parquet")) {
+//            stateCenterTriplesDF.write().parquet(hdfsOutputPath + Shape.HEXAGON_LARGE_CENTER.name());
+//        }
+        stateCenterTriplesDF.write().format(fileFormat).save(hdfsOutputPath + Shape.HEXAGON_LARGE_CENTER.name());
         long stateCenterEnd = System.nanoTime();
         g.stateCenterRowList = null;
         g.stateCenterRowRDD = null;
@@ -465,11 +468,12 @@ public class DistDataSyntheticGenerator {
         logger.info("num of partitions of poiTriplesRDD = " + poiTriplesRDD.getNumPartitions());
         // store Points of Interest triples to HDFS file
         Dataset<String> poiTriplesDF = spark.createDataset(poiTriplesRDD.rdd(), Encoders.STRING());
-        if (fileFormat.equalsIgnoreCase("text")) {
-            poiTriplesDF.write().text(hdfsOutputPath + Shape.POINT.name());
-        } else if (fileFormat.equalsIgnoreCase("parquet")) {
-            poiTriplesDF.write().parquet(hdfsOutputPath + Shape.POINT.name());
-        }
+//        if (fileFormat.equalsIgnoreCase("text")) {
+//            poiTriplesDF.write().text(hdfsOutputPath + Shape.POINT.name());
+//        } else if (fileFormat.equalsIgnoreCase("parquet")) {
+//            poiTriplesDF.write().parquet(hdfsOutputPath + Shape.POINT.name());
+//        }
+        poiTriplesDF.write().format(fileFormat).save(hdfsOutputPath + Shape.POINT.name());
         long poiEnd = System.nanoTime();
         g.poiRowList = null;
         g.poiRowRDD = null;
@@ -493,11 +497,12 @@ public class DistDataSyntheticGenerator {
         JavaRDD<String> roadTriplesRDD = g.roadRDD.flatMap(road -> road.getTriples());
         logger.info("num of partitions of roadTriplesRDD = " + roadTriplesRDD.getNumPartitions());
         Dataset<String> roadTriplesDF = spark.createDataset(roadTriplesRDD.rdd(), Encoders.STRING());
-        if (fileFormat.equalsIgnoreCase("text")) {
-            roadTriplesDF.write().text(hdfsOutputPath + Shape.LINESTRING.name());
-        } else if (fileFormat.equalsIgnoreCase("parquet")) {
-            roadTriplesDF.write().parquet(hdfsOutputPath + Shape.LINESTRING.name());
-        }
+//        if (fileFormat.equalsIgnoreCase("text")) {
+//            roadTriplesDF.write().text(hdfsOutputPath + Shape.LINESTRING.name());
+//        } else if (fileFormat.equalsIgnoreCase("parquet")) {
+//            roadTriplesDF.write().parquet(hdfsOutputPath + Shape.LINESTRING.name());
+//        }
+        roadTriplesDF.write().format(fileFormat).save(hdfsOutputPath + Shape.LINESTRING.name());
         long roadEnd = System.nanoTime();
         g.roadRDD.unpersist();
         g.roadRDD = null;
