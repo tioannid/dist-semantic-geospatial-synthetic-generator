@@ -344,7 +344,6 @@ public class DistDataSyntheticGenerator {
         g.landOwnershipRowRDD = (partitions != 0)
                 ? sc.parallelize(g.landOwnershipRowList, partitions)
                 : sc.parallelize(g.landOwnershipRowList);
-        logger.info("ALERT-DEBUG 0: Number of g.landOwnershipRowRDD records after parallelizing : " + g.landOwnershipRowRDD.count());
         // produce Land Ownership triples
         JavaRDD<String> landOwnershipTriplesRDD
                 = g.landOwnershipRowRDD.flatMap(
@@ -353,7 +352,6 @@ public class DistDataSyntheticGenerator {
                                 g.getSmallHexagonDx(),
                                 g.getSmallHexagonSide(),
                                 g.MAX_TAG_VALUE.intValue()));
-        logger.info("ALERT-DEBUG 0: Number of landOwnershipTriplesRDD records : " + landOwnershipTriplesRDD.count());
         logger.info("num of partitions of landOwnershipTriplesRDD = " + landOwnershipTriplesRDD.getNumPartitions());
         // store Land Ownership triples to HDFS file
         Dataset<String> landOwnershipTriplesDF = spark.createDataset(landOwnershipTriplesRDD.rdd(), Encoders.STRING());        
@@ -383,7 +381,6 @@ public class DistDataSyntheticGenerator {
         g.stateRowRDD = (partitions != 0)
                 ? sc.parallelize(g.stateRowList, partitions)
                 : sc.parallelize(g.stateRowList);
-        logger.info("ALERT-DEBUG 1: Number of g.stateRowRDD records after parallelizing : " + g.stateRowRDD.count());
         // produce State triples
         JavaRDD<String> stateTriplesRDD
                 = g.stateRowRDD.flatMap(
@@ -392,7 +389,6 @@ public class DistDataSyntheticGenerator {
                                 g.getLargeHexagonDx(),
                                 g.getLargeHexagonSide(),
                                 g.MAX_TAG_VALUE.intValue()));
-        logger.info("ALERT-DEBUG 1: Number of stateTriplesRDD records : " + stateTriplesRDD.count());
         logger.info("num of partitions of stateTriplesRDD = " + stateTriplesRDD.getNumPartitions());
         // store State triples to HDFS file
         Dataset<String> stateTriplesDF = spark.createDataset(stateTriplesRDD.rdd(), Encoders.STRING());
@@ -422,7 +418,6 @@ public class DistDataSyntheticGenerator {
         g.stateCenterRowRDD = (partitions != 0)
                 ? sc.parallelize(g.stateCenterRowList, partitions)
                 : sc.parallelize(g.stateCenterRowList);
-        logger.info("ALERT-DEBUG 2: Number of g.stateCenterRowRDD records after parallelizing : " + g.stateCenterRowRDD.count());
         // produce State Center triples
         JavaRDD<String> stateCenterTriplesRDD
                 = g.stateCenterRowRDD.flatMap(
@@ -431,7 +426,6 @@ public class DistDataSyntheticGenerator {
                                 g.getLargeHexagonDx(),
                                 g.getLargeHexagonSide(),
                                 g.MAX_TAG_VALUE.intValue()));
-        logger.info("ALERT-DEBUG 2: Number of stateCenterTriplesRDD records : " + stateCenterTriplesRDD.count());
         logger.info("num of partitions of stateCenterTriplesRDD = " + stateCenterTriplesRDD.getNumPartitions());
         // store State Center triples to HDFS file
         Dataset<String> stateCenterTriplesDF = spark.createDataset(stateCenterTriplesRDD.rdd(), Encoders.STRING());
@@ -461,7 +455,6 @@ public class DistDataSyntheticGenerator {
         g.poiRowRDD = (partitions != 0)
                 ? sc.parallelize(g.poiRowList, partitions)
                 : sc.parallelize(g.poiRowList);
-        logger.info("ALERT-DEBUG 3: Number of g.poiRowRDD records after parallelizing : " + g.poiRowRDD.count());
         // produce Points of Interest triples
         JavaRDD<String> poiTriplesRDD
                 = g.poiRowRDD.flatMap(
@@ -472,7 +465,6 @@ public class DistDataSyntheticGenerator {
                                 g.minX,
                                 g.minY,
                                 g.MAX_TAG_VALUE.intValue()));
-        logger.info("ALERT-DEBUG 3: Number of poiTriplesRDD records : " + poiTriplesRDD.count());
         logger.info("num of partitions of poiTriplesRDD = " + poiTriplesRDD.getNumPartitions());
         // store Points of Interest triples to HDFS file
         Dataset<String> poiTriplesDF = spark.createDataset(poiTriplesRDD.rdd(), Encoders.STRING());
@@ -491,6 +483,8 @@ public class DistDataSyntheticGenerator {
         long poiMins = (poiSecs / 60);
         poiSecs = poiSecs - (poiMins * 60);
 
+        runGC();
+
         // Roads generation
         long roadStart = System.nanoTime();
         try {
@@ -500,9 +494,7 @@ public class DistDataSyntheticGenerator {
         } catch (IOException ex) {
             logger.error(ex.getMessage());
         }
-        logger.info("ALERT-DEBUG 4: Number of g.roadRDD records after parallelizing : " + g.roadRDD.count());
         JavaRDD<String> roadTriplesRDD = g.roadRDD.flatMap(road -> road.getTriples());
-        logger.info("ALERT-DEBUG 4: Number of roadTriplesRDD records : " + roadTriplesRDD.count());
         logger.info("num of partitions of roadTriplesRDD = " + roadTriplesRDD.getNumPartitions());
         Dataset<String> roadTriplesDF = spark.createDataset(roadTriplesRDD.rdd(), Encoders.STRING());
 //        if (fileFormat.equalsIgnoreCase("text")) {
