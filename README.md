@@ -30,7 +30,7 @@ The 'DistDataSyntheticGenerator' main class has the following syntax:
 	
 The following command uses the 'hdfs' jar to create a N=256 scaled dataset comprising 5 parquet snappy-compressed files each one in 1 partition
 
-	$ $SPARK_HOME/bin/spark-submit --class generator.DistDataSyntheticGenerator --master spark://localhost:7077 --conf spark.sql.parquet.compression.codec=snappy target/SyntheticGenerator-2.3-SNAPSHOT_hdfs.jar parquet hdfs://localhost:9000/user/tioannid/Resources/Synthetic/256/data/ 256 1
+	$ $SPARK_HOME/bin/spark-submit --class generator.DistDataSyntheticGenerator --master spark://localhost:7077 --conf spark.sql.parquet.compression.codec=snappy target/SyntheticGenerator-2.3.4-SNAPSHOT_hdfs.jar parquet hdfs://localhost:9000/user/tioannid/Resources/Synthetic/256/data/ 256 1
 
 	$ hdfs dfs -ls Resources/Synthetic/256/data/*
         Found 2 items
@@ -62,7 +62,7 @@ The 'DistQuerySyntheticGenerator' main class has the following syntax:
 	
 The following command uses the 'hdfs' jar to create a N=256 queryset to be used with the corresponding N=256 scaled dataset and spatial selectivities (100%, 25%, 10%, 1%)
 
-	$ $SPARK_HOME/bin/spark-submit --class generator.DistQuerySyntheticGenerator --master spark://localhost:7077 target/SyntheticGenerator-2.3-SNAPSHOT_hdfs.jar hdfs://localhost:9000/user/tioannid/Resources/Synthetic/256/queries/ 256 "1,0.25,0.1,0.01"
+	$ $SPARK_HOME/bin/spark-submit --class generator.DistQuerySyntheticGenerator --master spark://localhost:7077 target/SyntheticGenerator-2.3.4-SNAPSHOT_hdfs.jar hdfs://localhost:9000/user/tioannid/Resources/Synthetic/256/queries/ 256 "1,0.25,0.1,0.01"
 
 	$ hdfs dfs -ls Resources/Synthetic/256/queries
         Found 28 items
