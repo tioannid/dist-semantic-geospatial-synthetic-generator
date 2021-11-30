@@ -19,6 +19,7 @@ import java.util.List;
 public class LandOwnership implements Serializable {    // Small Hexagon
 
     // ----- STATIC MEMBERS -----
+    private static final org.apache.log4j.Logger logger = org.apache.log4j.Logger.getLogger("LandOwnership");
     static final String className = "LandOwnership";
     static final String prefix = "http://geographica.di.uoa.gr/generator/landOwnership/";
     static long classInstanceId = 0;
@@ -34,18 +35,20 @@ public class LandOwnership implements Serializable {    // Small Hexagon
     double x, y;
     double hexSide;
     int MAX_TAG_VALUE;
+    boolean all_thema;
 
     // ----- CONSTRUCTORS -----
     public LandOwnership(double x, double y, DistDataSyntheticGenerator g) {
-        this(x, y, g.SMALL_HEX_SIDE.getValue(), g.TAG_VALUE.getValue());
+        this(x, y, g.SMALL_HEX_SIDE.getValue(), g.TAG_VALUE.getValue(), g.isAll_thema());
     }
 
-    public LandOwnership(double x, double y, double hexSide, int MAX_TAG_VALUE) {
+    public LandOwnership(double x, double y, double hexSide, int MAX_TAG_VALUE, boolean all_thema) {
         this.id = getClassInstanceId(); // get id and increment it
         this.x = x;
         this.y = y;
         this.hexSide = hexSide;
         this.MAX_TAG_VALUE = MAX_TAG_VALUE;
+        this.all_thema = all_thema;
     }
 
     // ----- DATA ACCESSORS -----
@@ -100,7 +103,7 @@ public class LandOwnership implements Serializable {    // Small Hexagon
         if (id == 1) { // insert class level triples
             triples.add("<" + prefix + "asWKT> <http://www.w3.org/2000/01/rdf-schema#subPropertyOf> <http://www.opengis.net/ont/geosparql#asWKT> .");
         }
-        
+
         // feature is class
         triples.add("<" + prefixID + "/> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <" + prefix + className + "> .");
         // feature has geometry
@@ -109,8 +112,10 @@ public class LandOwnership implements Serializable {    // Small Hexagon
         triples.add("<" + prefixGeometryId + "/> <" + prefix + "asWKT> \"" + wkt + "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .");
 
         for (int tagId = 1; (id % tagId == 0) && tagId <= MAX_TAG_VALUE; tagId *= 2) {
-            if (tagId > 1 && tagId < MAX_TAG_VALUE) {
-                continue;
+            if (!all_thema) { // if not ALL_THEMA needed then short circuit the intermediate tag values
+                if (tagId > 1 && tagId < MAX_TAG_VALUE) {
+                    continue;
+                }
             }
             // in loop optimization
             prefixIdTagId = prefixIdTag + tagId;

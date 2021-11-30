@@ -93,6 +93,10 @@ public class DistDataSyntheticGenerator {
     List<Integer> poiRowList;
     JavaRDD<Integer> poiRowRDD;
 
+    // ALL_THEMA
+    boolean all_thema;
+    Broadcast<Boolean> ALL_THEMA;
+
     // ----- CONSTRUCTORS -----
     /**
      * @param hdfsOutputPath
@@ -100,7 +104,7 @@ public class DistDataSyntheticGenerator {
      * generated along an axis. smallHexagonsPerAxis^2 hexagons will be
      * generated.
      */
-    public DistDataSyntheticGenerator(String hdfsOutputPath, int smallHexagonsPerAxis) {
+    public DistDataSyntheticGenerator(String hdfsOutputPath, int smallHexagonsPerAxis, boolean all_thema) {
         this.smallHexagonsPerAxis = smallHexagonsPerAxis;
         output = new Path(hdfsOutputPath);
         this.MAX_TAG_VALUE = smallHexagonsPerAxis;
@@ -108,6 +112,7 @@ public class DistDataSyntheticGenerator {
 //            MAX_TAG_VALUE >>= 1; // divide by 2
 //            //MAX_TAG_VALUE = MAX_TAG_VALUE / 2;
 //        }
+        this.all_thema = all_thema;
     }
 
     // ----- DATA ACCESSORS -----
@@ -144,18 +149,24 @@ public class DistDataSyntheticGenerator {
         return (3 * getSmallHexagonDx());
     }
 
+    public boolean isAll_thema() {
+        return all_thema;
+    }
+
     static class GetLandOwnershipTriples implements FlatMapFunction<Integer, String> {
 
         private final int n, maxtag;
         private final double dx, side, x, y;
+        private final boolean all_thema;
 
-        public GetLandOwnershipTriples(int n, double dx, double side, int maxtag) {
+        public GetLandOwnershipTriples(int n, double dx, double side, int maxtag, boolean all_thema) {
             this.n = n;
             this.dx = dx;
             this.side = side;
             this.x = dx / 2;
             this.y = side;
             this.maxtag = maxtag;
+            this.all_thema = all_thema;
         }
 
         @Override
@@ -172,7 +183,7 @@ public class DistDataSyntheticGenerator {
                 rowx = x + (dx / 2d);
             }
             for (int col = 1; col <= n; col++) {
-                lndown = new LandOwnership(rowx, rowy, side, maxtag);
+                lndown = new LandOwnership(rowx, rowy, side, maxtag, all_thema);
                 triples.addAll(lndown.getTriplesList());
                 rowx += dx;
             }
@@ -184,14 +195,16 @@ public class DistDataSyntheticGenerator {
 
         private final int n, maxtag;
         private final double dx, side, x, y;
+        private final boolean all_thema;
 
-        public GetStateTriples(int n, double dx, double side, int maxtag) {
+        public GetStateTriples(int n, double dx, double side, int maxtag, boolean all_thema) {
             this.n = n;
             this.dx = dx;
             this.side = side;
             this.x = dx / 2;
             this.y = side;
             this.maxtag = maxtag;
+            this.all_thema = all_thema;
         }
 
         @Override
@@ -208,7 +221,7 @@ public class DistDataSyntheticGenerator {
                 rowx = x + (dx / 2d);
             }
             for (int col = 1; col <= n; col++) {
-                state = new State(rowx, rowy, side, maxtag);
+                state = new State(rowx, rowy, side, maxtag, all_thema);
                 triples.addAll(state.getTriplesList());
                 rowx += dx;
             }
@@ -220,13 +233,15 @@ public class DistDataSyntheticGenerator {
 
         private final int n, maxtag;
         private final double dx, x, y;
+        private final boolean all_thema;
 
-        public GetStateCenterTriples(int n, double dx, double side, int maxtag) {
+        public GetStateCenterTriples(int n, double dx, double side, int maxtag, boolean all_thema) {
             this.n = n;
             this.dx = dx;
             this.x = dx / 2;
             this.y = side;
             this.maxtag = maxtag;
+            this.all_thema = all_thema;
         }
 
         @Override
@@ -243,7 +258,7 @@ public class DistDataSyntheticGenerator {
                 rowx = x + (dx / 2d);
             }
             for (int col = 1; col <= n; col++) {
-                stateCenter = new StateCenter(rowx, rowy, maxtag);
+                stateCenter = new StateCenter(rowx, rowy, maxtag, all_thema);
                 triples.addAll(stateCenter.getTriplesList());
                 rowx += dx;
             }
@@ -255,14 +270,16 @@ public class DistDataSyntheticGenerator {
 
         private final int n, maxtag;
         private final double dy, maxX, minX, minY;
+        private final boolean all_thema;
 
-        public GetPoiTriples(int n, double dy, double maxX, double minX, double minY, int maxtag) {
+        public GetPoiTriples(int n, double dy, double maxX, double minX, double minY, int maxtag, boolean all_thema) {
             this.n = n;
             this.dy = dy;
             this.maxX = maxX;
             this.minX = minX;
             this.minY = minY;
             this.maxtag = maxtag;
+            this.all_thema = all_thema;
         }
 
         @Override
@@ -281,7 +298,7 @@ public class DistDataSyntheticGenerator {
                 tmp = (double) col * dx;
                 x3 = x1 + tmp;
                 y3 = slope * tmp + y1;
-                poi = new PointOfInterest(x3, y3, maxtag);
+                poi = new PointOfInterest(x3, y3, maxtag, all_thema);
                 triples.addAll(poi.getTriplesList());
             }
             return triples.iterator();
@@ -293,26 +310,33 @@ public class DistDataSyntheticGenerator {
      */
     public static void main(String[] args) {
         // check number of arguments
-        if (args.length < 4) {
-            System.err.println("Usage: SyntheticGenerator <FILEFORMAT> <OUTPUTPATH> <N> <PARTITIONS>");
+        if (args.length < 4 || args.length > 5) {
+            System.err.println("Usage: SyntheticGenerator <FILEFORMAT> <OUTPUTPATH> <N> <PARTITIONS> {<ALL_THEMA>}");
             System.err.println("       where <FILEFORMAT> is the file format {text | parquet} for the output files,");
             System.err.println("       where <OUTPUT PATH> is the folder where the generated RDF files will be stored,");
             System.err.println("             <N> is number of generated land ownership (small hexagons) along the x axis");
             System.err.println("             <PARTITIONS> is number of partitions to use");
+            System.err.println("             {<ALL_THEMA>} default value=false, produce all thematic tag values");
         }
         // read arguments
         String fileFormat = args[0];
         String hdfsOutputPath = args[1];
         int N = Integer.parseInt(args[2]);
         int partitions = new Integer(args[3]);
+        boolean all_thema = false;
+        if (args.length == 5) {
+            String arg_all_thema = args[4];
+            all_thema = arg_all_thema.equalsIgnoreCase("ALL_THEMA");
+        }
 
         // check if fileFormat is correct
         if (!(fileFormat.equals("text") || fileFormat.equals("parquet"))) {
-            System.err.println("Usage: SyntheticGenerator <FILEFORMAT> <OUTPUTPATH> <N> <PARTITIONS>");
+            System.err.println("Usage: SyntheticGenerator <FILEFORMAT> <OUTPUTPATH> <N> <PARTITIONS> {<ALL_THEMA>}");
             System.err.println("       where <FILEFORMAT> is the file format {text | parquet} for the output files,");
             System.err.println("       where <OUTPUT PATH> is the folder where the generated RDF files will be stored,");
             System.err.println("             <N> is number of generated land ownership (small hexagons) along the x axis");
             System.err.println("             <PARTITIONS> is number of partitions to use");
+            System.err.println("             {<ALL_THEMA>} default value=false, produce all thematic tag values");
         }
 
         // create Spark session, Java spark context and Spark conf
@@ -325,13 +349,14 @@ public class DistDataSyntheticGenerator {
 
         // start time measurement for the main part of the program
         long startTime = System.nanoTime();
-        DistDataSyntheticGenerator g = new DistDataSyntheticGenerator(hdfsOutputPath, N);
+        DistDataSyntheticGenerator g = new DistDataSyntheticGenerator(hdfsOutputPath, N, all_thema);
         g.SMALL_HEX_PER_AXIS = sc.broadcast(g.smallHexagonsPerAxis);
         g.MAXX = sc.broadcast(g.maxX);
         g.MAXY = sc.broadcast(g.maxY);
         g.TAG_VALUE = sc.broadcast(g.MAX_TAG_VALUE);
         g.SMALL_HEX_SIDE = sc.broadcast(g.getSmallHexagonSide());
         g.LARGE_HEX_SIDE = sc.broadcast(g.getLargeHexagonSide());
+        g.ALL_THEMA = sc.broadcast(g.isAll_thema());
 
         // ----------------- 1) Land Ownership generation ----------------
         long landOwnershipStart = System.nanoTime();
@@ -351,10 +376,11 @@ public class DistDataSyntheticGenerator {
                                 g.getSmallHexagonsPerAxis(),
                                 g.getSmallHexagonDx(),
                                 g.getSmallHexagonSide(),
-                                g.MAX_TAG_VALUE.intValue()));
+                                g.MAX_TAG_VALUE.intValue(),
+                                g.ALL_THEMA.getValue()));
         logger.info("num of partitions of landOwnershipTriplesRDD = " + landOwnershipTriplesRDD.getNumPartitions());
         // store Land Ownership triples to HDFS file
-        Dataset<String> landOwnershipTriplesDF = spark.createDataset(landOwnershipTriplesRDD.rdd(), Encoders.STRING());        
+        Dataset<String> landOwnershipTriplesDF = spark.createDataset(landOwnershipTriplesRDD.rdd(), Encoders.STRING());
 //        if (fileFormat.equalsIgnoreCase("text")) {
 //            landOwnershipTriplesDF.write().text(hdfsOutputPath + Shape.HEXAGON_SMALL.name());
 //        } else if (fileFormat.equalsIgnoreCase("parquet")) {
@@ -388,7 +414,8 @@ public class DistDataSyntheticGenerator {
                                 g.getLargeHexagonsPerAxis(),
                                 g.getLargeHexagonDx(),
                                 g.getLargeHexagonSide(),
-                                g.MAX_TAG_VALUE.intValue()));
+                                g.MAX_TAG_VALUE.intValue(),
+                                g.isAll_thema()));
         logger.info("num of partitions of stateTriplesRDD = " + stateTriplesRDD.getNumPartitions());
         // store State triples to HDFS file
         Dataset<String> stateTriplesDF = spark.createDataset(stateTriplesRDD.rdd(), Encoders.STRING());
@@ -425,7 +452,8 @@ public class DistDataSyntheticGenerator {
                                 g.getLargeHexagonsPerAxis(),
                                 g.getLargeHexagonDx(),
                                 g.getLargeHexagonSide(),
-                                g.MAX_TAG_VALUE.intValue()));
+                                g.MAX_TAG_VALUE.intValue(),
+                                g.isAll_thema()));
         logger.info("num of partitions of stateCenterTriplesRDD = " + stateCenterTriplesRDD.getNumPartitions());
         // store State Center triples to HDFS file
         Dataset<String> stateCenterTriplesDF = spark.createDataset(stateCenterTriplesRDD.rdd(), Encoders.STRING());
@@ -464,7 +492,8 @@ public class DistDataSyntheticGenerator {
                                 g.maxX,
                                 g.minX,
                                 g.minY,
-                                g.MAX_TAG_VALUE.intValue()));
+                                g.MAX_TAG_VALUE.intValue(),
+                                g.isAll_thema()));
         logger.info("num of partitions of poiTriplesRDD = " + poiTriplesRDD.getNumPartitions());
         // store Points of Interest triples to HDFS file
         Dataset<String> poiTriplesDF = spark.createDataset(poiTriplesRDD.rdd(), Encoders.STRING());

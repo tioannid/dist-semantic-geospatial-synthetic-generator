@@ -33,17 +33,19 @@ public class PointOfInterest implements Serializable {    // Small Hexagon
     long id;
     double x, y;
     int MAX_TAG_VALUE;
+    boolean all_thema;
 
     // ----- CONSTRUCTORS -----
     public PointOfInterest(double x, double y, DistDataSyntheticGenerator g) {
-        this(x, y, g.TAG_VALUE.getValue());
+        this(x, y, g.TAG_VALUE.getValue(), g.isAll_thema());
     }
 
-    public PointOfInterest(double x, double y, int MAX_TAG_VALUE) {
+    public PointOfInterest(double x, double y, int MAX_TAG_VALUE, boolean all_thema) {
         this.id = getClassInstanceId(); // get id and increment it
         this.x = x;
         this.y = y;
         this.MAX_TAG_VALUE = MAX_TAG_VALUE;
+        this.all_thema = all_thema;
     }
 
     // ----- DATA ACCESSORS -----
@@ -60,7 +62,7 @@ public class PointOfInterest implements Serializable {    // Small Hexagon
         if (id == 1) { // insert class level triples
             triples.add("<" + prefix + "asWKT> <http://www.w3.org/2000/01/rdf-schema#subPropertyOf> <http://www.opengis.net/ont/geosparql#asWKT> .");
         }
-        
+
         // feature is class
         triples.add("<" + prefixID + "/> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <" + prefix + className + "> .");
         // feature has geometry
@@ -98,7 +100,7 @@ public class PointOfInterest implements Serializable {    // Small Hexagon
         if (id == 1) { // insert class level triples
             triples.add("<" + prefix + "asWKT> <http://www.w3.org/2000/01/rdf-schema#subPropertyOf> <http://www.opengis.net/ont/geosparql#asWKT> .");
         }
-        
+
         // feature is class
         triples.add("<" + prefixID + "/> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <" + prefix + className + "> .");
         // feature has geometry
@@ -107,8 +109,10 @@ public class PointOfInterest implements Serializable {    // Small Hexagon
         triples.add("<" + prefixGeometryId + "/> <" + prefix + "asWKT> \"" + wkt + "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .");
 
         for (int tagId = 1; (id % tagId == 0) && tagId <= MAX_TAG_VALUE; tagId *= 2) {
-            if (tagId > 1 && tagId < MAX_TAG_VALUE) {
-                continue;
+            if (!all_thema) { // if not ALL_THEMA needed then short circuit the intermediate tag values
+                if (tagId > 1 && tagId < MAX_TAG_VALUE) {
+                    continue;
+                }
             }
             // in loop optimization
             prefixIdTagId = prefixIdTag + tagId;

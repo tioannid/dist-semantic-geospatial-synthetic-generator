@@ -36,6 +36,7 @@ public class Road implements Serializable {    // Small Hexagon
     long N;
     double maxX, maxY;
     int MAX_TAG_VALUE;
+    boolean all_thema;
 
     // ----- CONSTRUCTORS -----
     public Road(double x, double y, double e,
@@ -51,6 +52,7 @@ public class Road implements Serializable {    // Small Hexagon
         maxX = g.MAXX.getValue();
         maxY = g.MAXY.getValue();
         MAX_TAG_VALUE = g.TAG_VALUE.getValue();
+        all_thema = g.isAll_thema();
     }
 
     // ----- DATA ACCESSORS -----
@@ -77,8 +79,10 @@ public class Road implements Serializable {    // Small Hexagon
         triples.add("<" + prefixGeometryId + "/> <" + prefix + "asWKT> \"" + wkt + "\"^^<http://www.opengis.net/ont/geosparql#wktLiteral> .");
 
         for (int tagId = 1; (id % tagId == 0) && tagId <= MAX_TAG_VALUE; tagId *= 2) {
-            if (tagId > 1 && tagId < MAX_TAG_VALUE) {
-                continue;
+            if (!all_thema) { // if not ALL_THEMA needed then short circuit the intermediate tag values
+                if (tagId > 1 && tagId < MAX_TAG_VALUE) {
+                    continue;
+                }
             }
             // in loop optimization
             prefixIdTagId = prefixIdTag + tagId;
