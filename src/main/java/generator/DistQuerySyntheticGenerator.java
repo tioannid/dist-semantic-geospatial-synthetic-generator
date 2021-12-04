@@ -80,6 +80,16 @@ public class DistQuerySyntheticGenerator {
         }
     };
 
+    HashMap<Shape, String> namedFeatures = new HashMap<Shape, String>() {
+        {
+            put(Shape.HEXAGON_SMALL, "Landownerships");
+            put(Shape.HEXAGON_LARGE, "States");
+            put(Shape.LINESTRING, "Roads");
+            put(Shape.POINT, "Pois");
+            put(Shape.HEXAGON_LARGE_CENTER, "StateCenters");
+        }
+    };
+
     // the extension functions that will be used for generating queries
     enum TopologicalFunction {
         INTERSECTS, TOUCHES, WITHIN
@@ -109,9 +119,10 @@ public class DistQuerySyntheticGenerator {
     Integer MAX_TAG_VALUE = 8192;
 
     //private double[] selectivities = new double[]{0.4, 0.3, 0.2, 0.1,  0.001};
-    double[] selectivities;
+    double[] spatialSelectivities;
     static SparkConf conf;
     static JavaSparkContext sc;
+    int[] thematicTagSelectivities;
 
     // ----- CONSTRUCTORS -----
     /**
@@ -121,14 +132,21 @@ public class DistQuerySyntheticGenerator {
      * generated.
      */
     public DistQuerySyntheticGenerator(String hdfsOutputPath, int smallHexagonsPerAxis,
-            List<String> spatialSelectiviesList) {
+            List<String> spatialSelectiviesList, String thematicTagSelectiviesArg) {
         this.smallHexagonsPerAxis = smallHexagonsPerAxis;
         output = new Path(hdfsOutputPath);
         // convert spatial selectivitity string list to array of doubles
-        this.selectivities = new double[spatialSelectiviesList.size()];
-        for (int i = 0; i < this.selectivities.length; i++) {
-            this.selectivities[i] = Double.parseDouble(spatialSelectiviesList.get(i));
-            logger.info("Spatial selectivity value [:" + i + "] = " + this.selectivities[i]);
+        this.spatialSelectivities = new double[spatialSelectiviesList.size()];
+        for (int i = 0; i < this.spatialSelectivities.length; i++) {
+            this.spatialSelectivities[i] = Double.parseDouble(spatialSelectiviesList.get(i));
+            logger.info("Spatial selectivity value [:" + i + "] = " + this.spatialSelectivities[i]);
+        }
+        // convert thematic tag selectivities argument into an array of int tag values
+        String tags[] = thematicTagSelectiviesArg.split(",");
+        this.thematicTagSelectivities = new int[tags.length];
+        for (int i = 0; i < tags.length; i++) {
+            this.thematicTagSelectivities[i] = Integer.parseInt(tags[i]);
+            logger.info("Thematic selectivity tag value [:" + tags[i] + "] = " + this.thematicTagSelectivities[i]);
         }
 
         this.MAX_TAG_VALUE = smallHexagonsPerAxis;
@@ -172,7 +190,7 @@ public class DistQuerySyntheticGenerator {
         return (3 * getSmallHexagonDx());
     }
 
-    String getQueryName(int function, int queryType, int k) {
+    String getQueryName(int function, int queryType, String featuresPart) {
         // function name
         String functionName = "";
         switch (function) {
@@ -196,91 +214,24 @@ public class DistQuerySyntheticGenerator {
                 type = "Join";
                 break;
         }
-        // feature 1, 2
-        String feature1 = "", feature2 = "";
-        if (function == 0) {
-            feature1 = "Landownerships";
-            if (queryType == 0) {
-                feature2 = "";
-            } else if (queryType == 1) {
-                feature2 = "States";
-            }
-        } else if (function == 1) {
-            if (queryType == 1) {
-                feature1 = "States";
-                feature2 = "States";
-            }
-        } else if (function == 2) {
-            feature1 = "Pois";
-            if (queryType == 0) {
-                feature2 = "";
-            } else if (queryType == 1) {
-                feature2 = "States";
-            }
-        }
-        String feature1Str
-                = (feature1.equalsIgnoreCase(""))
-                ? feature1
-                : (feature1 + "_");
-        String feature2Str
-                = (feature2.equalsIgnoreCase(""))
-                ? feature2
-                : (feature2 + "_");
-        String baseName = "Synthetic_"
+        String queryName = "Synthetic_"
                 + type + "_"
-                + functionName + "_";
-        String queryName = "";
-        // k
-        String selectivityName = "";
-        String tagName = "";
-        if (queryType == 1) { // joins have 4 query combinations
-            switch (k) {
-                case 0:
-                    queryName = baseName
-                            + feature1Str
-                            + feature2Str
-                            + "1_1";
-                    break;
-                case 1:
-                    queryName = baseName
-                            + feature1Str
-                            + feature2Str
-                            + "1_"
-                            + this.MAX_TAG_VALUE.toString();
-                    break;
-                case 2: // switch feature 1 and feature 2 position in the query!!!
-                    queryName = baseName
-                            + feature2Str
-                            + feature1Str
-                            + "1_"
-                            + this.MAX_TAG_VALUE.toString();
-                    break;
-                case 3:
-                    queryName = baseName
-                            + feature1Str
-                            + feature2Str
-                            + this.MAX_TAG_VALUE.toString() + "_"
-                            + this.MAX_TAG_VALUE.toString();
-                    break;
-            }
-        } else if (queryType == 0) { // selections have 2*selectivities queries
-            int pos = (int) k / 2;
-            selectivityName = String.valueOf(this.selectivities[pos]);
-            if (k % 2 == 0) {
-                tagName = "1";
-            } else {
-                tagName = this.MAX_TAG_VALUE.toString();
-            }
-            queryName = baseName
-                    + feature1Str
-                    + tagName + "_"
-                    + selectivityName;
-        }
+                + functionName + "_"
+                + featuresPart;
+
         return queryName;
     }
 
-    public String[][][] generateQueries() {
-        String[][][] queries = new String[3][2][];
+    public int getNumberOfThematicTagSelectivities() {
+        return thematicTagSelectivities.length;
+    }
+
+    public String[][][][] generateQueries() {
+        /* first index denotes spatial function (intersect, touch, within) : 3
+           second index denotes query type (selection, join) : 2
+           third index denotes the query
+         */
+        String[][][][] queries = new String[3][2][][];
 
         // Intersects
         queries[0][0] = generateSpatialSelection(TopologicalFunction.INTERSECTS, Shape.HEXAGON_SMALL);
@@ -288,9 +239,10 @@ public class DistQuerySyntheticGenerator {
 
         // Touches
         // skip selections
-        queries[1][0] = new String[queries[0][0].length];
-        for (int i = 0; i < queries[0][0].length; i++) {
-            queries[1][0][i] = "";
+        queries[1][0] = new String[2][queries[0][0][0].length];
+        for (int i = 0; i < queries[0][0][0].length; i++) {
+            queries[1][0][0][i] = "";
+            queries[1][0][1][i] = "";
         }
         queries[1][1] = generateSpatialJoin(TopologicalFunction.TOUCHES, Shape.HEXAGON_LARGE, Shape.HEXAGON_LARGE);
 
@@ -385,7 +337,7 @@ public class DistQuerySyntheticGenerator {
      * @return
      */
     private String[] generateSpatialSelectionPoints(Shape shp1) {
-        String[] queries = new String[this.selectivities.length * 2];
+        String[] queries = new String[this.spatialSelectivities.length * 2];
 
         String query = prefixes
                 + " SELECT ?s1 \n"
@@ -400,8 +352,8 @@ public class DistQuerySyntheticGenerator {
                 "       FILTER ( " + "bif:st_within" + "(?geo1, bif:st_point(45, 45), DISTANCE)) .\n"
                 + " }\n";
 
-        for (int i = 0; i < this.selectivities.length; i++) {
-            String[] distanceAndCenter = defineDistanceForSelectivity(shp1, this.selectivities[i]);
+        for (int i = 0; i < this.spatialSelectivities.length; i++) {
+            String[] distanceAndCenter = defineDistanceForSelectivity(shp1, this.spatialSelectivities[i]);
 
             String distance = null;
 
@@ -426,8 +378,8 @@ public class DistQuerySyntheticGenerator {
      * @param shp2: The second shape to be used
      * @return
      */
-    private String[] generateSpatialJoin(TopologicalFunction function, Shape shp1, Shape shp2) {
-        String[] queries = new String[4];
+    private String[][] generateSpatialJoin(TopologicalFunction function, Shape shp1, Shape shp2) {
+        String[][] queries = new String[2][this.thematicTagSelectivities.length * this.thematicTagSelectivities.length * 2];
         String header = prefixes
                 + " SELECT ?s1 ?s2 \n"
                 + " WHERE {\n";
@@ -447,11 +399,26 @@ public class DistQuerySyntheticGenerator {
         //"       }\n" +
         String footer = "       FILTER ( " + extensionFunctions.get(function) + "(?geo1, ?geo2)) .\n"
                 + " }\n";
-
-        queries[0] = header + partA.replace("KEY1", "1") + partB.replace("KEY2", "1") + footer;
-        queries[1] = header + partA.replace("KEY1", "1") + partB.replace("KEY2", this.MAX_TAG_VALUE.toString()) + footer;
-        queries[2] = header + partB.replace("KEY2", "1") + partA.replace("KEY1", this.MAX_TAG_VALUE.toString()) + footer;
-        queries[3] = header + partA.replace("KEY1", this.MAX_TAG_VALUE.toString()) + partB.replace("KEY2", this.MAX_TAG_VALUE.toString()) + footer;
+        String queryTemplate1 = header + partA + partB + footer;
+        String queryTemplate2 = header + partB + partA + footer;
+        String query;
+        int queryNo = 0;
+        for (int i = 0; i < this.thematicTagSelectivities.length; i++) {
+            for (int j = 0; j < this.thematicTagSelectivities.length; j++) {
+                query = queryTemplate1;
+                // in the first template use tag[i] for KEY1 and iterate tag[j] for KEY2
+                queries[0][queryNo] = query.replace("KEY1", String.valueOf(this.thematicTagSelectivities[i])).replace("KEY2", String.valueOf(this.thematicTagSelectivities[j]));
+                queries[1][queryNo] = namedFeatures.get(shp1) + "_" + namedFeatures.get(shp2) + "_" + String.valueOf(this.thematicTagSelectivities[i]) + "_" + String.valueOf(this.thematicTagSelectivities[j]);
+                queryNo++;
+            }
+            for (int j = 0; j < this.thematicTagSelectivities.length; j++) {
+                query = queryTemplate2;
+                // in the second template use tag[i] for KEY2 and iterate tag[j] for KEY1
+                queries[0][queryNo] = query.replace("KEY2", String.valueOf(this.thematicTagSelectivities[i])).replace("KEY1", String.valueOf(this.thematicTagSelectivities[j]));
+                queries[1][queryNo] = namedFeatures.get(shp2) + "_" + namedFeatures.get(shp1) + "_" + String.valueOf(this.thematicTagSelectivities[i]) + "_" + String.valueOf(this.thematicTagSelectivities[j]);
+                queryNo++;
+            }
+        }
 
         return queries;
     }
@@ -463,9 +430,9 @@ public class DistQuerySyntheticGenerator {
      * @param shp2: The second shape to be used
      * @return
      */
-    private String[] generateSpatialSelection(TopologicalFunction function, Shape shp1) {
-        String[] queries = new String[this.selectivities.length * 2];
-        String query = prefixes
+    private String[][] generateSpatialSelection(TopologicalFunction function, Shape shp1) {
+        String[][] queries = new String[2][this.spatialSelectivities.length * this.thematicTagSelectivities.length];
+        String queryTemplate = prefixes
                 + " SELECT ?s1 \n"
                 + " WHERE {\n"
                 + //" GRAPH <" + namedGraphs.get(shp1) + "> { \n" +
@@ -476,11 +443,18 @@ public class DistQuerySyntheticGenerator {
                 + //"       }\n" +						
                 "       FILTER ( " + extensionFunctions.get(function) + "(?geo1, \"CONSTANT\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>)) .\n"
                 + " }\n";
-
-        for (int i = 0; i < this.selectivities.length; i++) {
-            String bb = definePolygonForSelectivity(shp1, this.selectivities[i]);
-            queries[2 * i] = query.replace("CONSTANT", bb).replace("KEY1", "1");
-            queries[2 * i + 1] = query.replace("CONSTANT", bb).replace("KEY1", this.MAX_TAG_VALUE.toString());
+        String query;
+        int queryNo = 0;
+        for (int i = 0; i < this.spatialSelectivities.length; i++) {
+            String bb = definePolygonForSelectivity(shp1, this.spatialSelectivities[i]);
+            // replace the polygon for spatial selection
+            query = queryTemplate.replace("CONSTANT", bb);
+            for (int j = 0; j < this.thematicTagSelectivities.length; j++) {
+                // replace the tag key value
+                queries[0][queryNo] = query.replace("KEY1", String.valueOf(this.thematicTagSelectivities[j]));
+                queries[1][queryNo] = namedFeatures.get(shp1) + "_" + String.valueOf(this.thematicTagSelectivities[j]) + "_" + this.spatialSelectivities[i];
+                queryNo++;
+            }
         }
 
         return queries;
@@ -794,7 +768,7 @@ public class DistQuerySyntheticGenerator {
     }
 
     public double[] returnSelectivities() {
-        return this.selectivities;
+        return this.spatialSelectivities;
     }
 
     public static class AvgRegistrator implements KryoRegistrator {
@@ -812,10 +786,11 @@ public class DistQuerySyntheticGenerator {
     public static void main(String[] args) {
         // check number of arguments
         if (args.length < 3) {
-            logger.error("Usage: SyntheticGenerator <OUTPUTPATH> <N> <SPATIAL_SELECTIVITIES>");
+            logger.error("Usage: SyntheticGenerator <OUTPUTPATH> <N> <SPATIAL_SELECTIVITIES> <THEMATIC_SELECTIVITIES>");
             logger.error("       where <OUTPUT PATH> is the folder where the generated query files will be stored,");
             logger.error("             <N> is number of generated land ownership (small hexagons) along the x axis");
             logger.error("             <SPATIAL_SELECTIVITIES> is the spatial selectivity list (comma separated within double-quotes)");
+            logger.error("             <THEMATIC_SELECTIVITIES> is the thematic tag list (comma separated within double-quotes of 2^i values <= N)");
         }
         // read arguments
         String hdfsOutputPath = args[0];
@@ -831,6 +806,8 @@ public class DistQuerySyntheticGenerator {
             logger.info("Spatial selectivity [" + i + "] : " + spatialSelectiviesList.get(i));
         }
         logger.info("DecimalFormatSymbols.getDecimalSeparator() = " + DecimalFormatSymbols.getInstance().getDecimalSeparator());
+        // read thematic tag list
+        String thematicTagSelectiviesArg = args[3].replace("\"", "");
 
         // create Spark conf and context
         conf = new SparkConf()
@@ -839,7 +816,7 @@ public class DistQuerySyntheticGenerator {
         conf.set("spark.kryo.registrator", AvgRegistrator.class.getName());
         sc = new JavaSparkContext(conf);
 
-        DistQuerySyntheticGenerator g = new DistQuerySyntheticGenerator(hdfsOutputPath, N, spatialSelectiviesList);
+        DistQuerySyntheticGenerator g = new DistQuerySyntheticGenerator(hdfsOutputPath, N, spatialSelectiviesList, thematicTagSelectiviesArg);
 
         // create the HDFS output path if not present
         Configuration hdfsConf = new Configuration();
@@ -859,27 +836,27 @@ public class DistQuerySyntheticGenerator {
         }
 
         logger.info("\n\nGeneral Queries\n");
-        String[][][] q = g.generateQueries();
+        String[][][][] q = g.generateQueries();
         int queryCnt = 0;
         Path queryFilePath = null;
         FSDataOutputStream queryFile = null;
         for (int function = 0; function < q.length; function++) { // intersect, touch, within
-            String[][] queriesForFunction = q[function];
+            String[][][] queriesForFunction = q[function];
             for (int queryType = 0; queryType < queriesForFunction.length; queryType++) { // selection, join
                 if ((function == 1) && (queryType == 0)) {
                     continue;
                 }
-                String[] queries = queriesForFunction[queryType];
-                for (int k = 0; k < queries.length; k++) {
+                String[][] queries = queriesForFunction[queryType];
+                for (int k = 0; k < queries[0].length; k++) {
                     try {
-                        logger.info(queries[k]);
-                        queryFilePath = new Path(hdfsOutputPath + String.format("Q%02d_%s", queryCnt++, g.getQueryName(function, queryType, k) + ".qry"));
+                        logger.info(queries[0][k]);
+                        queryFilePath = new Path(hdfsOutputPath + String.format("Q%02d_%s", queryCnt++, g.getQueryName(function, queryType, queries[1][k]) + ".qry"));
                         try {
                             queryFile = fs.create(queryFilePath);
                         } catch (IOException ex) {
                             logger.error(ex.getMessage());
                         }
-                        byte[] bytes = queries[k].getBytes();
+                        byte[] bytes = queries[0][k].getBytes();
                         queryFile.write(bytes, 0, bytes.length);
                         queryFile.close();
                     } catch (IOException ex) {
