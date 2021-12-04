@@ -27,7 +27,7 @@ The 'DistDataSyntheticGenerator' main class has the following syntax:
 	<DstDir> : destination folder in HDFS
 	<N> : dataset scale factor, a value (preferably 2^k) which scales the size of the dataset
 	<P> : number of partitions, to be used for the generation of the 5 data files (0=automatic)
-        {<ALL_THEMA>} : default value=false, produce all thematic tag values
+    {<ALL_THEMA>} : default value=false, produce all thematic tag values
 	
 The following command uses the 'hdfs' jar to create a N=256 scaled dataset comprising 5 parquet snappy-compressed files each one in 1 partition and use all thematic tag values
 
@@ -56,43 +56,87 @@ Create a synthetic queryset
 --------------------------
 The 'DistQuerySyntheticGenerator' main class has the following syntax:
 
-	DistQuerySyntheticGenerator <DstDir> <N> <S>
+	DistQuerySyntheticGenerator <DstDir> <N> <S> <T>
 	<DstDir> : destination folder in HDFS
 	<N> : dataset scale factor, the queries will be used for the corresponding scaled dataset
 	<S> : selectivities list, eg. "1,0.5,0.1,0.01" for 100%, 50%, 10%, 1%, 0.1% selectivities
+        <T> : thematic tag list (comma separated within double-quotes of 2^i values <= N)
 	
-The following command uses the 'hdfs' jar to create a N=256 queryset to be used with the corresponding N=256 scaled dataset and spatial selectivities (100%, 25%, 10%, 1%)
+The following command uses the 'hdfs' jar to create a N=512 queryset to be used with the corresponding N=512 scaled dataset, using spatial selectivities (100%, 10%, 1%) and thematic tag list "1,2,512" (1-> 100%, 2-> 50%, 512-> 1/512*100 = 0,19%)
 
-	$ $SPARK_HOME/bin/spark-submit --class generator.DistQuerySyntheticGenerator --master spark://localhost:7077 target/SyntheticGenerator-2.4.4-SNAPSHOT_hdfs.jar hdfs://localhost:9000/user/tioannid/Resources/Synthetic/256/queries/ 256 "1,0.25,0.1,0.01"
+	$ $SPARK_HOME/bin/spark-submit --class generator.DistQuerySyntheticGenerator --master spark://localhost:7077 target/SyntheticGenerator-2.4.5-SNAPSHOT_hdfs.jar hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/ 512 "1,0.1,0.01" "1,2,512"
 
-	$ hdfs dfs -ls Resources/Synthetic/256/queries
-        Found 28 items
-        -rw-r--r--   1 tioannid supergroup        930 2021-04-21 10:05 Resources/Synthetic/256/queries/Q00_Synthetic_Selection_Intersects_Landownerships_1_1.0.qry
-        -rw-r--r--   1 tioannid supergroup        932 2021-04-21 10:05 Resources/Synthetic/256/queries/Q01_Synthetic_Selection_Intersects_Landownerships_256_1.0.qry
-        -rw-r--r--   1 tioannid supergroup        958 2021-04-21 10:05 Resources/Synthetic/256/queries/Q02_Synthetic_Selection_Intersects_Landownerships_1_0.25.qry
-        -rw-r--r--   1 tioannid supergroup        960 2021-04-21 10:05 Resources/Synthetic/256/queries/Q03_Synthetic_Selection_Intersects_Landownerships_256_0.25.qry
-        -rw-r--r--   1 tioannid supergroup        960 2021-04-21 10:05 Resources/Synthetic/256/queries/Q04_Synthetic_Selection_Intersects_Landownerships_1_0.1.qry
-        -rw-r--r--   1 tioannid supergroup        962 2021-04-21 10:05 Resources/Synthetic/256/queries/Q05_Synthetic_Selection_Intersects_Landownerships_256_0.1.qry
-        -rw-r--r--   1 tioannid supergroup        954 2021-04-21 10:05 Resources/Synthetic/256/queries/Q06_Synthetic_Selection_Intersects_Landownerships_1_0.01.qry
-        -rw-r--r--   1 tioannid supergroup        956 2021-04-21 10:05 Resources/Synthetic/256/queries/Q07_Synthetic_Selection_Intersects_Landownerships_256_0.01.qry
-        -rw-r--r--   1 tioannid supergroup       1106 2021-04-21 10:05 Resources/Synthetic/256/queries/Q08_Synthetic_Join_Intersects_Landownerships_States_1_1.qry
-        -rw-r--r--   1 tioannid supergroup       1108 2021-04-21 10:05 Resources/Synthetic/256/queries/Q09_Synthetic_Join_Intersects_Landownerships_States_1_256.qry
-        -rw-r--r--   1 tioannid supergroup       1108 2021-04-21 10:05 Resources/Synthetic/256/queries/Q10_Synthetic_Join_Intersects_States_Landownerships_1_256.qry
-        -rw-r--r--   1 tioannid supergroup       1110 2021-04-21 10:05 Resources/Synthetic/256/queries/Q11_Synthetic_Join_Intersects_Landownerships_States_256_256.qry
-        -rw-r--r--   1 tioannid supergroup       1071 2021-04-21 10:05 Resources/Synthetic/256/queries/Q12_Synthetic_Join_Touches_States_States_1_1.qry
-        -rw-r--r--   1 tioannid supergroup       1073 2021-04-21 10:05 Resources/Synthetic/256/queries/Q13_Synthetic_Join_Touches_States_States_1_256.qry
-        -rw-r--r--   1 tioannid supergroup       1073 2021-04-21 10:05 Resources/Synthetic/256/queries/Q14_Synthetic_Join_Touches_States_States_1_256.qry
-        -rw-r--r--   1 tioannid supergroup       1075 2021-04-21 10:05 Resources/Synthetic/256/queries/Q15_Synthetic_Join_Touches_States_States_256_256.qry
-        -rw-r--r--   1 tioannid supergroup        908 2021-04-21 10:05 Resources/Synthetic/256/queries/Q16_Synthetic_Selection_Within_Pois_1_1.0.qry
-        -rw-r--r--   1 tioannid supergroup        910 2021-04-21 10:05 Resources/Synthetic/256/queries/Q17_Synthetic_Selection_Within_Pois_256_1.0.qry
-        -rw-r--r--   1 tioannid supergroup        936 2021-04-21 10:05 Resources/Synthetic/256/queries/Q18_Synthetic_Selection_Within_Pois_1_0.25.qry
-        -rw-r--r--   1 tioannid supergroup        938 2021-04-21 10:05 Resources/Synthetic/256/queries/Q19_Synthetic_Selection_Within_Pois_256_0.25.qry
-        -rw-r--r--   1 tioannid supergroup        932 2021-04-21 10:05 Resources/Synthetic/256/queries/Q20_Synthetic_Selection_Within_Pois_1_0.1.qry
-        -rw-r--r--   1 tioannid supergroup        934 2021-04-21 10:05 Resources/Synthetic/256/queries/Q21_Synthetic_Selection_Within_Pois_256_0.1.qry
-        -rw-r--r--   1 tioannid supergroup        936 2021-04-21 10:05 Resources/Synthetic/256/queries/Q22_Synthetic_Selection_Within_Pois_1_0.01.qry
-        -rw-r--r--   1 tioannid supergroup        938 2021-04-21 10:05 Resources/Synthetic/256/queries/Q23_Synthetic_Selection_Within_Pois_256_0.01.qry
-        -rw-r--r--   1 tioannid supergroup       1110 2021-04-21 10:05 Resources/Synthetic/256/queries/Q24_Synthetic_Join_Within_Pois_States_1_1.qry
-        -rw-r--r--   1 tioannid supergroup       1112 2021-04-21 10:06 Resources/Synthetic/256/queries/Q25_Synthetic_Join_Within_Pois_States_1_256.qry
-        -rw-r--r--   1 tioannid supergroup       1112 2021-04-21 10:06 Resources/Synthetic/256/queries/Q26_Synthetic_Join_Within_States_Pois_1_256.qry
-        -rw-r--r--   1 tioannid supergroup       1114 2021-04-21 10:06 Resources/Synthetic/256/queries/Q27_Synthetic_Join_Within_Pois_States_256_256.qry
-
+	$ hdfs dfs -ls hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest
+    Found 72 items
+    -rw-r--r--   1 tioannid supergroup        928 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q00_Synthetic_Selection_Intersects_Landownerships_1_1.0.qry
+    -rw-r--r--   1 tioannid supergroup        928 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q01_Synthetic_Selection_Intersects_Landownerships_2_1.0.qry
+    -rw-r--r--   1 tioannid supergroup        930 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q02_Synthetic_Selection_Intersects_Landownerships_512_1.0.qry
+    -rw-r--r--   1 tioannid supergroup        960 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q03_Synthetic_Selection_Intersects_Landownerships_1_0.1.qry
+    -rw-r--r--   1 tioannid supergroup        960 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q04_Synthetic_Selection_Intersects_Landownerships_2_0.1.qry
+    -rw-r--r--   1 tioannid supergroup        962 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q05_Synthetic_Selection_Intersects_Landownerships_512_0.1.qry
+    -rw-r--r--   1 tioannid supergroup        958 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q06_Synthetic_Selection_Intersects_Landownerships_1_0.01.qry
+    -rw-r--r--   1 tioannid supergroup        958 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q07_Synthetic_Selection_Intersects_Landownerships_2_0.01.qry
+    -rw-r--r--   1 tioannid supergroup        960 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q08_Synthetic_Selection_Intersects_Landownerships_512_0.01.qry
+    -rw-r--r--   1 tioannid supergroup       1106 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q09_Synthetic_Join_Intersects_Landownerships_States_1_1.qry
+    -rw-r--r--   1 tioannid supergroup       1106 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q10_Synthetic_Join_Intersects_Landownerships_States_1_2.qry
+    -rw-r--r--   1 tioannid supergroup       1108 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q11_Synthetic_Join_Intersects_Landownerships_States_1_512.qry
+    -rw-r--r--   1 tioannid supergroup       1106 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q12_Synthetic_Join_Intersects_States_Landownerships_1_1.qry
+    -rw-r--r--   1 tioannid supergroup       1106 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q13_Synthetic_Join_Intersects_States_Landownerships_1_2.qry
+    -rw-r--r--   1 tioannid supergroup       1108 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q14_Synthetic_Join_Intersects_States_Landownerships_1_512.qry
+    -rw-r--r--   1 tioannid supergroup       1106 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q15_Synthetic_Join_Intersects_Landownerships_States_2_1.qry
+    -rw-r--r--   1 tioannid supergroup       1106 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q16_Synthetic_Join_Intersects_Landownerships_States_2_2.qry
+    -rw-r--r--   1 tioannid supergroup       1108 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q17_Synthetic_Join_Intersects_Landownerships_States_2_512.qry
+    -rw-r--r--   1 tioannid supergroup       1106 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q18_Synthetic_Join_Intersects_States_Landownerships_2_1.qry
+    -rw-r--r--   1 tioannid supergroup       1106 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q19_Synthetic_Join_Intersects_States_Landownerships_2_2.qry
+    -rw-r--r--   1 tioannid supergroup       1108 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q20_Synthetic_Join_Intersects_States_Landownerships_2_512.qry
+    -rw-r--r--   1 tioannid supergroup       1108 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q21_Synthetic_Join_Intersects_Landownerships_States_512_1.qry
+    -rw-r--r--   1 tioannid supergroup       1108 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q22_Synthetic_Join_Intersects_Landownerships_States_512_2.qry
+    -rw-r--r--   1 tioannid supergroup       1110 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q23_Synthetic_Join_Intersects_Landownerships_States_512_512.qry
+    -rw-r--r--   1 tioannid supergroup       1108 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q24_Synthetic_Join_Intersects_States_Landownerships_512_1.qry
+    -rw-r--r--   1 tioannid supergroup       1108 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q25_Synthetic_Join_Intersects_States_Landownerships_512_2.qry
+    -rw-r--r--   1 tioannid supergroup       1110 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q26_Synthetic_Join_Intersects_States_Landownerships_512_512.qry
+    -rw-r--r--   1 tioannid supergroup       1071 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q27_Synthetic_Join_Touches_States_States_1_1.qry
+    -rw-r--r--   1 tioannid supergroup       1071 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q28_Synthetic_Join_Touches_States_States_1_2.qry
+    -rw-r--r--   1 tioannid supergroup       1073 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q29_Synthetic_Join_Touches_States_States_1_512.qry
+    -rw-r--r--   1 tioannid supergroup       1071 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q30_Synthetic_Join_Touches_States_States_1_1.qry
+    -rw-r--r--   1 tioannid supergroup       1071 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q31_Synthetic_Join_Touches_States_States_1_2.qry
+    -rw-r--r--   1 tioannid supergroup       1073 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q32_Synthetic_Join_Touches_States_States_1_512.qry
+    -rw-r--r--   1 tioannid supergroup       1071 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q33_Synthetic_Join_Touches_States_States_2_1.qry
+    -rw-r--r--   1 tioannid supergroup       1071 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q34_Synthetic_Join_Touches_States_States_2_2.qry
+    -rw-r--r--   1 tioannid supergroup       1073 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q35_Synthetic_Join_Touches_States_States_2_512.qry
+    -rw-r--r--   1 tioannid supergroup       1071 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q36_Synthetic_Join_Touches_States_States_2_1.qry
+    -rw-r--r--   1 tioannid supergroup       1071 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q37_Synthetic_Join_Touches_States_States_2_2.qry
+    -rw-r--r--   1 tioannid supergroup       1073 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q38_Synthetic_Join_Touches_States_States_2_512.qry
+    -rw-r--r--   1 tioannid supergroup       1073 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q39_Synthetic_Join_Touches_States_States_512_1.qry
+    -rw-r--r--   1 tioannid supergroup       1073 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q40_Synthetic_Join_Touches_States_States_512_2.qry
+    -rw-r--r--   1 tioannid supergroup       1075 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q41_Synthetic_Join_Touches_States_States_512_512.qry
+    -rw-r--r--   1 tioannid supergroup       1073 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q42_Synthetic_Join_Touches_States_States_512_1.qry
+    -rw-r--r--   1 tioannid supergroup       1073 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q43_Synthetic_Join_Touches_States_States_512_2.qry
+    -rw-r--r--   1 tioannid supergroup       1075 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q44_Synthetic_Join_Touches_States_States_512_512.qry
+    -rw-r--r--   1 tioannid supergroup        908 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q45_Synthetic_Selection_Within_Pois_1_1.0.qry
+    -rw-r--r--   1 tioannid supergroup        908 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q46_Synthetic_Selection_Within_Pois_2_1.0.qry
+    -rw-r--r--   1 tioannid supergroup        910 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q47_Synthetic_Selection_Within_Pois_512_1.0.qry
+    -rw-r--r--   1 tioannid supergroup        934 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q48_Synthetic_Selection_Within_Pois_1_0.1.qry
+    -rw-r--r--   1 tioannid supergroup        934 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q49_Synthetic_Selection_Within_Pois_2_0.1.qry
+    -rw-r--r--   1 tioannid supergroup        936 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q50_Synthetic_Selection_Within_Pois_512_0.1.qry
+    -rw-r--r--   1 tioannid supergroup        936 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q51_Synthetic_Selection_Within_Pois_1_0.01.qry
+    -rw-r--r--   1 tioannid supergroup        936 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q52_Synthetic_Selection_Within_Pois_2_0.01.qry
+    -rw-r--r--   1 tioannid supergroup        938 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q53_Synthetic_Selection_Within_Pois_512_0.01.qry
+    -rw-r--r--   1 tioannid supergroup       1110 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q54_Synthetic_Join_Within_Pois_States_1_1.qry
+    -rw-r--r--   1 tioannid supergroup       1110 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q55_Synthetic_Join_Within_Pois_States_1_2.qry
+    -rw-r--r--   1 tioannid supergroup       1112 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q56_Synthetic_Join_Within_Pois_States_1_512.qry
+    -rw-r--r--   1 tioannid supergroup       1110 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q57_Synthetic_Join_Within_States_Pois_1_1.qry
+    -rw-r--r--   1 tioannid supergroup       1110 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q58_Synthetic_Join_Within_States_Pois_1_2.qry
+    -rw-r--r--   1 tioannid supergroup       1112 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q59_Synthetic_Join_Within_States_Pois_1_512.qry
+    -rw-r--r--   1 tioannid supergroup       1110 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q60_Synthetic_Join_Within_Pois_States_2_1.qry
+    -rw-r--r--   1 tioannid supergroup       1110 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q61_Synthetic_Join_Within_Pois_States_2_2.qry
+    -rw-r--r--   1 tioannid supergroup       1112 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q62_Synthetic_Join_Within_Pois_States_2_512.qry
+    -rw-r--r--   1 tioannid supergroup       1110 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q63_Synthetic_Join_Within_States_Pois_2_1.qry
+    -rw-r--r--   1 tioannid supergroup       1110 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q64_Synthetic_Join_Within_States_Pois_2_2.qry
+    -rw-r--r--   1 tioannid supergroup       1112 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q65_Synthetic_Join_Within_States_Pois_2_512.qry
+    -rw-r--r--   1 tioannid supergroup       1112 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q66_Synthetic_Join_Within_Pois_States_512_1.qry
+    -rw-r--r--   1 tioannid supergroup       1112 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q67_Synthetic_Join_Within_Pois_States_512_2.qry
+    -rw-r--r--   1 tioannid supergroup       1114 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q68_Synthetic_Join_Within_Pois_States_512_512.qry
+    -rw-r--r--   1 tioannid supergroup       1112 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q69_Synthetic_Join_Within_States_Pois_512_1.qry
+    -rw-r--r--   1 tioannid supergroup       1112 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q70_Synthetic_Join_Within_States_Pois_512_2.qry
+    -rw-r--r--   1 tioannid supergroup       1114 2021-12-03 22:37 hdfs://localhost:9000/user/tioannid/Resources/Synthetic/512/qrytest/Q71_Synthetic_Join_Within_States_Pois_512_512.qry
